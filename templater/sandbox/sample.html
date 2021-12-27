@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+
+        <!-- lodash.js -->
+        <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.20/lodash.min.js" integrity="sha256-ur/YlHMU96MxHEsy3fHGszZHas7NzH4RQlD4tDVvFhw=" crossorigin="anonymous"></script>
+
+        <!-- <script src="https://code.jquery.com/jquery-3.4.1.slim.min.js" integrity="sha384-J6qa4849blE2+poT4WnyKhv5vZF5SrPo0iEjwBvKU7imGFAV0wwj1yYfoRSJoZ+n" crossorigin="anonymous"></script> -->
+
+    </head>
+    <body>
+
+        Regular body text
+
+        <pre id="conf">
+sample.ini
+
+foo: plain
+bar = 123
+hartley= brody\n
+unicode: 🏰
+baz: 2021-04-06
+hey there: 26.2
+whats_up: nm, hbu
+yo:  "eleven"
+        </pre>
+
+        <div id="param-form">
+            <form>
+                <div>
+                    Tell us about this field:
+                    <span onclick="close_form()" style="float:right">
+                        &times;
+                    </span>
+                </div>
+                <br>
+                name: <input type="text" name="name"><br>
+                desc: <input type="text" name="desc"><br>
+                default value: <input type="text" name="default_val"><br>
+                <hr>
+                <button type="button" onclick="close_form()">cancel</button>
+                <input type="submit" value="save field" />
+            </form>
+        </div>
+
+        <script type="text/javascript">
+            let close_form = function(){
+                document.querySelector('#param-form').style.display = 'none';
+                return false
+            }
+            let handle_selection = function(){
+                handle_selection_once.cancel()
+
+                var selected_text = window.getSelection() + ""  // cast directly to string
+                if (!selected_text){
+                    console.log("empty selection")
+                    return
+                } else {
+                    console.log("selected_text:", selected_text)
+                }
+
+
+                var range = window.getSelection().getRangeAt(0)
+
+                if (range.startContainer != range.endContainer){
+                    alert("selection across multiple HTML container objects")
+                    console.log(range)
+                    return
+                } else {
+                    // var selected_text = range.commonAncestorContainer.textContent.substr(
+                    //     range.startOffset, range.endOffset - range.startOffset
+                    // )
+                    // console.log(selected_text)
+
+                    if (selected_text.indexOf("\n") != -1){
+                        alert("selection contains newlines, please only select one line of text")
+                        return
+                    }
+
+                    // get the line and column of selection begin/end
+                    var selection_location = {},
+                        current_line_num = 0,
+                        current_char_num = 0
+
+                    var lines = range.commonAncestorContainer.textContent.split("\n")
+                    while (true){
+                        var line = lines[current_line_num]
+                        if (current_char_num + line.length > range.startOffset){
+                            // start of selection is on this line
+                            selection_location = {
+                                line: current_line_num + 1,  // correct 0-index in array
+                                col_start: range.startOffset - current_char_num,
+                                col_end: range.endOffset - current_char_num,
+                            }
+                            break
+                        }
+                        current_char_num += line.length + 1  // correct for newline character that we .split() out
+                        current_line_num += 1
+                    }
+                    // console.log(selection_location)
+
+                    // try to capture a key name that's before their selection
+                    var key_name = null
+                    if (selection_location.col_start > 2){
+                        var bs = line.substr(0, selection_location.col_start)
+                        pieces = bs.split(/[^A-Za-z0-9_-\s]/)  // split on anything not a valid key name
+                        // pieces = bs.split(/[=:]/)  // split on common key characters
+                        console.log(pieces)
+                        for (var i=pieces.length-1; i>=0; i--){
+                            var piece = pieces[i] || ""
+                            piece = piece.trim()
+                            if (piece){
+                                key_name = piece
+                                console.log(piece)
+                                break
+                            }
+                        }
+                    }
+
+                    verify_selection_location = lines[selection_location.line-1].substr(
+                        selection_location.col_start,
+                        selection_location.col_end - selection_location.col_start
+                    )
+                    if (verify_selection_location != selected_text){
+                        console.log("verify_text:", verify_selection_location)
+                        alert("whoops, the location we calculated doesn't match the text you selected")
+                        return
+                    }
+
+                    // bring up the edit form
+                    var form = document.querySelector("#param-form")
+                    selection_rect = range.getBoundingClientRect()
+                    // console.log(selection_rect)
+
+                    form.style.top = selection_rect.bottom + 10 + "px";
+                    form.style.left = selection_rect.right + 10 + "px";
+                    form.style.display = "block";
+
+                    // populate the form based on their selection
+                    document.querySelector("[name='default_val']").value = selected_text
+                    if (key_name){
+                        document.querySelector("[name='name']").value = key_name
+                    }
+
+                    // // adding a surrounding highlight span makes this loop for some reason?
+                    // var highlight = document.createElement("span");
+                    // highlight.setAttribute("id", "highlight");
+                    // highlight.setAttribute("style", "background-color: pink;");
+                    // range.surroundContents(highlight);
+                }
+
+            }
+            let handle_selection_once = _.debounce(handle_selection, 500, {trailing: true})
+            document.onselectionchange = function(){
+                handle_selection_once()
+            }
+        </script>
+
+        <style type="text/css">
+            #param-form {
+                display: none;
+                position: fixed;
+
+                padding: 10px;
+
+                border: 1px solid #ccc;
+                background: #fff;
+            }
+        </style>
+
+
+    </body>
+</html>
+

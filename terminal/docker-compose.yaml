@@ -1,0 +1,14 @@
+version: "3"
+services:
+  terminal_api:
+    image: dojomodeling/terminal:api-dev
+    container_name: terminal_api
+    command: -debug -trace -pull-images=false
+    ports:
+      - 3000:3000
+#     env_file:
+#       - .dockerenv
+    volumes:
+      - ${PWD}/connector/server/settings.yaml:/home/app/api/settings.yaml
+
+

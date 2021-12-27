@@ -1,0 +1,84 @@
+h2 small {
+    color: #ccc;
+    font-size: 50%;
+    font-family: Courier New, 'sans-serif';
+
+    display: inline-block;
+    max-width: calc( 60 * 1vw );
+}
+
+#file_contents {
+    display: block !important;  /* bootstrap's default 'display:flex;' causes spans to be full-width */
+    counter-reset: line; /* https://stackoverflow.com/a/40842325/625840 */
+}
+
+#file_contents .editor-line {
+    display: block;
+}
+#editor.mode-config #file_contents .editor-line::before {
+    counter-increment: line;
+    content: counter(line, decimal-leading-zero);
+    display: inline-block;
+    text-align: right;
+
+    border-right: 1px solid #ddd;
+    padding: 0 12px;
+    margin-right: 12px;
+    color: var(--dark)
+}
+
+#file_contents span[class^="saved-param"] {
+    background-color: var(--yellow);
+    cursor: pointer;
+    padding: 2px 0;
+    border: 1px solid black;
+    border-radius: 3px;
+}
+#file_contents .saved-param::before{
+    content: "{{";
+}
+#file_contents .saved-param::after{
+    content: "}}";
+}
+#file_contents .saved-param-static {
+    background-color: var(--red) !important;
+}
+
+.editor-line::selection, .editor-line .current-selection {
+    background-color: var(--cyan);
+}
+.editor-line span::selection {
+    background-color: transparent;
+    user-select: none;
+}
+
+small.choices-warning {
+    display: inline-block;
+    line-height: 1.2;
+}
+
+
+#form-container {
+    position: absolute;
+    width: 450px;
+}
+
+#param-editor .required::after {
+    content: " *";
+    color: var(--red);
+}
+
+@media (prefers-color-scheme: dark) {
+    /* Dark theme styles go here */
+    html, body, a, input, textarea {
+        background: #343a40;
+        color: #f8f9fa;
+    }
+    .bg-white {
+        background: #343a40 !important;
+    }
+    a.close {
+        color: #f8f9fa !important;
+    }
+
+}

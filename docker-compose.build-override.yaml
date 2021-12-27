@@ -1,0 +1,111 @@
+services:
+  annotate:
+    command:
+      - python3
+      - manage.py
+      - runserver
+      - 0.0.0.0:8000
+    environment:
+      - REDIS_HOST
+    env_file:
+      - envfile
+    networks:
+      - dojo
+  processor:
+    environment:
+      - REDIS_HOST
+    networks:
+      - dojo
+  templater:
+    env_file:
+      - envfile
+    environment:
+      - DOJO_HOST
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - S3_BUCKET=${ANNOTATION_S3_BUCKET}
+    networks:
+      - dojo
+  api:
+    command: ["uvicorn", "server:api", "--host", "0.0.0.0", "--port", "80", "--reload", "--reload-dir", "src", "--log-config", "logging.yaml"]
+    volumes:
+      - ./api:/api
+    env_file:
+      - envfile
+    environment:
+      - DOJO_URL
+      - DMC_LOCAL_DIR
+      - DMC_URL
+      - DMC_PASSWORD
+      - REDIS_HOST
+      - DOCKERHUB_USER
+      - DOCKERHUB_PWD
+    networks:
+      - dojo
+  terminal_api:
+    command: -debug -pull-images=false
+    build:
+      context: ./terminal/api
+      dockerfile: Dockerfile
+    image: dojomodeling/terminal:terminal_api-dev
+    volumes:
+      - ${PWD}/terminal/api/server/settings.yaml:/home/app/connector/settings.yaml:rw
+    env_file:
+      - envfile
+    environment:
+      - DOCKERHUB_AUTH
+      - TERMINAL_WORKERS=${DOCKER_URL}:${DOCKER_PORT}
+    networks:
+      - dojo
+  kibana:
+    env_file:
+      - envfile
+    networks:
+      - dojo
+  elasticsearch:
+    env_file:
+      - envfile
+    networks:
+      - dojo
+  redis:
+    env_file:
+      - envfile
+    networks:
+      - dojo
+  docker:
+    env_file:
+      - envfile
+    networks:
+      - dojo
+  ui:
+    build:
+      context: ./ui/
+      dockerfile: Dockerfile.dev
+    container_name: ui
+    env_file:
+      - envfile
+    volumes:
+      - "./ui:/ui"
+    expose:
+      - 8080
+    ports:
+      - "8080:8080"
+    command:
+      - npx
+      - webpack
+      - serve
+      - --mode
+      - development
+      - --config
+      - ./webpack.config.dev.js
+      - --host
+      - 0.0.0.0
+    networks:
+      - dojo
+
+
+networks:
+  dojo:
+    driver: bridge
+    name: dojo
+

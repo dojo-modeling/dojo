@@ -1,0 +1,9 @@
+---
+
+rules:
+  block:
+    - vim
+    - vi
+    - emacs
+    - edit
+  prompt:

@@ -1,0 +1,14 @@
+version: '2.2'
+services:
+  docker:
+    build: .
+    container_name: docker
+    expose:
+      - "2375"
+      - "2376"
+      - "8375"
+    privileged: true
+    volumes:
+      - docker:/var/lib/docker
+volumes:
+  docker: {}

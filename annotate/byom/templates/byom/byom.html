@@ -1,0 +1,160 @@
+<!doctype html>
+	<html lang="en">
+	<head>
+				<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+  <!-- Latest compiled and minified CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.13.14/dist/css/bootstrap-select.min.css">
+
+  <!-- Latest compiled and minified JavaScript -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap-select@1.13.14/dist/js/bootstrap-select.min.js"></script>
+
+  <!-- (Optional) Latest compiled and minified JavaScript translation files -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap-select@1.13.14/dist/js/i18n/defaults-am_ET.min.js"></script>
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" />
+		<script>
+			$(document).ready(function(e) {
+				  $('.selectpicker').selectpicker();
+				});
+	</script>
+
+
+		<title>Dojo Data Workflow</title>
+		<style>
+		select {
+			-moz-appearance: none;
+			background: rgba(0, 0, 0, 0) url("https://i.stack.imgur.com/tLwVk.png") no-repeat scroll 100% center / 20px 13px !important;
+			border: 1px solid #ccc;
+			overflow: hidden;
+			padding: 6px 20px 6px 6px !important;
+			width: auto;
+		}
+		button {
+			margin-bottom: 10%;
+		}
+	</style>
+	<meta name="description" content="Description Goes Here">
+	<script>
+		async function excelSheets(){
+			document.getElementById("submit").disabled = true;
+			var f = document.getElementById("myFile").value
+			let formData = new FormData();
+			formData.append("file", f);
+			fetch('overview/proxy/sheets?mode=byom&fp={{local_fp}}&uuid={{uuid}}').then(function(sheets) {
+				console.log(sheets)
+				return sheets.json()
+				    // here you can use the result of promiseB
+				}).then(function(response) {
+					var sheets = response['sheets']
+					var el = "<label for='sheets_dropdown'> Sheets </label>"
+					el += '<select name="excel_Sheet" class="form-control" id="sheets_dropdown">'
+					var options = []
+					for (var i = sheets.length - 1; i >= 0; i--) {
+						var line = '<option value="'+ sheets[i] +'">' + sheets[i] + '</option>';
+						el = el + line;
+					}
+					el = el + '</select>'
+					document.getElementById("formExtension").innerHTML = el;
+					document.getElementById("submit").disabled = false;
+				});
+			}
+		</script>
+		<style> 
+		* {font-family: "Roboto", "Helvetica", "Arial", sans-serif;}
+		#formExtension{margin-bottom: 2%;}
+		body {
+			text-align: center;
+			margin-top:5%;
+		}  
+		h4 {
+			text-align: left;
+			margin-top:5%;
+			color:rgb(107, 107, 107);
+		}
+		form {
+			display: inline-block;
+			text-align: left;
+		}	  
+		button {
+			margin-top: 2%;
+		}
+	</style>
+	<script type="text/javascript">
+		function fileDetect() {
+			var file = document.getElementById("myFile");
+			var geotiffExtension = `{{ geotiff_Form | safe }}`
+			var xlsxExtension = `{{ excel_Form | safe }}`
+			console.log(file.value)
+
+			if (file.value.endsWith('.tiff') || file.value.endsWith('.tif')){
+				document.getElementById("formExtension").innerHTML = geotiffExtension;
+			}
+			else if (file.value.endsWith('.xls') || file.value.endsWith('.xlsx')){
+				excelSheets();
+			}
+			else {document.getElementById("formExtension").innerHTML = "";}
+  		// Inside find search element where the name should display (by Id Or Class)
+  	}
+  	$( document ).ready(function() {
+	    fileDetect();
+	});
+  </script>
+</head>
+<body>
+	<h1>Dojo Data Registration</h1>
+
+	<form id = 'meta' method='post' style='width:32%; margin-top:2%;' enctype="multipart/form-data">
+		<h4> Data Information </h4>
+		{% csrf_token %}
+        <input type="hidden" name="uuid" value="{{ uuid }}">
+		<div class="form-group">				
+			<label for='dataset_Name'>Name</label>
+			<input class="form-control" type="text" name='dataset_Name' id="dataset_Name" placeholder="What is the name of the dataset?" required/>
+		</div>
+		<div class="form-group">		
+			<label for='dataset_Description' required>Description</label>
+			<textarea class="form-control" name="dataset_Description" wrap="soft" id="dataset_Description" rows="3" placeholder="Please provide a description of the dataset." required></textarea >
+		</div>	
+		<div class="form-group">		
+			<label for='dataset_Category'>Category</label>
+			<input class="form-control" type="text" name='dataset_Category' id="dataset_Category" placeholder="List relevant categories (comma separated)" required/>
+		</div>
+
+		<h4> Resolution </h4>
+			
+			<div class="form-group">				
+				
+			  <label for="resolution_temporal">Temporal resolution:</label>
+			  <select id="resolution_temporal" name="resolution_temporal"  class="selectpicker">
+			    <option value="annual">annual</option>
+			    <option value="monthly">monthly</option>
+			    <option value="weekly">weekly</option>
+			    <option value="daily">daily</option>
+			    <option value="dekad">dekad</option>
+			    <option value="other">other</option>
+			  </select>
+			
+			</div>
+			<div class="form-group">		
+				<label for='resolution_spatial_x'>X resolution (meters)</label>
+				<input type="number" step="0.01" class="form-control" name="resolution_spatial_x" wrap="soft" id="resolution_spatial_x" placeholder="Spatial resolution of your data (meters)"></input >
+				<label for='resolution_spatial_y'>Y resolution (meters)</label>
+				<input type="number" step="0.01" class="form-control" name="resolution_spatial_y" wrap="soft" id="resolution_spatial_y" placeholder="Spatial resolution of your data (meters)"></input >
+			</div>	
+
+		<div class="form-group">
+			<label for="myFile">File</label>
+			<input class="form-control" type="text" id="myFile" name="filename" onchange="fileDetect()" value='{{fp}}'> </input>
+		</div>
+		<div class='form-group' id='formExtension'>
+		</div>
+		<div class="text-center">
+			<button class='btn btn-primary' id="submit" type="submit" form="meta" value="Submit">Submit</button>
+		</div>
+	</form>
+</body>
+</html>

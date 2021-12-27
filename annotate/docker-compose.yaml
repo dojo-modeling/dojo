@@ -1,0 +1,72 @@
+version: '2.2'
+services:
+
+  annotate:
+    build: .
+    image: dojomodeling/annotate:dev
+    container_name: annotate
+    environment:
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - CACHE_GADM
+      - TERMINAL_API_ENDPOINT
+      - DJANGO_LOG_LEVEL
+      - DOJO_URL
+      - DOJO_USERNAME
+      - DOJO_PASSWORD
+      - REDIS_HOST
+      - REDIS_PORT
+      - ANNOTATION_S3_BUCKET
+      - ANNOTATION_S3_PATH
+    volumes:
+        - ./:/annotate
+    ports:
+      - 8001:8000
+      - 3001:3001
+    expose:
+      - "8001"
+      - "3001"
+    networks:
+      - annotate
+    depends_on:
+      - redis
+      - processor
+
+  redis:
+    container_name: redis-annotate
+    image: redis
+    ports:
+      - 6382:6379
+    networks:
+      - annotate
+
+  processor:
+    build: .
+    image: dojomodeling/annotate:dev
+    container_name: annotate-processor
+    environment:
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - CACHE_GADM
+      - TERMINAL_API_ENDPOINT
+      - DJANGO_LOG_LEVEL
+      - DOJO_URL
+      - DOJO_USERNAME
+      - DOJO_PASSWORD
+      - REDIS_HOST
+      - REDIS_PORT
+      - ANNOTATION_S3_BUCKET
+      - ANNOTATION_S3_PATH
+    volumes:
+      - ./:/annotate
+    networks:
+      - annotate
+    command:
+      - python3
+      - manage.py
+      - rqworker
+      - default
+
+networks:
+  annotate:
+    driver: bridge      

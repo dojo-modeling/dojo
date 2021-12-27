@@ -1,0 +1,51 @@
+---
+version: 1
+disable_existing_loggers: False
+formatters:
+  default:
+    (): 'uvicorn.logging.DefaultFormatter'
+    fmt: '%(asctime)s %(levelprefix)-9s %(name)s - %(message)s'
+    use_colors: True
+
+  access:
+    (): 'uvicorn.logging.AccessFormatter'
+    fmt: '%(asctime)s %(levelprefix)-9s %(name)s -: %(client_addr)s - "%(request_line)s" %(status_code)s'
+    use_colors: True
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: default
+    stream: ext://sys.stderr
+
+  access:
+    class: logging.StreamHandler
+    formatter: access
+    stream: ext://sys.stdout
+
+loggers:
+  "":
+    level: DEBUG
+    handlers:
+      - console
+    propagate: False
+  fastapi:
+    level: DEBUG
+    handlers:
+      - console
+    propagate: False
+  uvicorn:
+    level: INFO
+    handlers:
+      - console
+    propagate: False
+  uvicorn.error:
+    level: INFO
+    handlers:
+      - console
+    propagate: False
+  uvicorn.access:
+    level: INFO
+    propagate: False
+    handlers:
+      - console

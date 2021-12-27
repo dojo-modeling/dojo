@@ -1,0 +1,10 @@
+FROM node:lts
+USER node
+
+COPY --chown=node . /ui
+WORKDIR /ui
+
+EXPOSE 8080
+RUN npm install
+CMD ["npm", "run", "dev"]
+

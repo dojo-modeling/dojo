@@ -1,0 +1,98 @@
+<html>
+  <head>
+    <title>xssh Terminal</title>
+
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@4.5.0/css/xterm.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xterm@4.5.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.3.0/lib/xterm-addon-fit.js"></script>
+
+    <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+    <style>
+      body {
+          font-family: helvetica, sans-serif, arial;
+          font-size: 1em;
+          color: #111;
+      }
+      h1 {
+          text-align: center;
+      }
+      #terminal-container {
+          width: 960px;
+          height: 600px;
+          margin: 0 auto;
+          padding: 2px;
+      }
+      #terminal-container .terminal {
+          background-color: #111;
+          color: #fafafa;
+          padding: 2px;
+      }
+      #terminal-container .terminal:focus .terminal-cursor {
+          background-color: #fafafa;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="btnConnect">Connect</button>
+    <button id="btnDisconnect">Disconnect</button>
+    <div id="terminal-container"></div>
+    <pre id="output"></pre>
+    <script>
+      window.addEventListener('load', function() {
+        let terminalContainer = document.getElementById('terminal-container');
+        let term = new Terminal({ cursorBlink: true });
+        let fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+        term.open(terminalContainer);
+        console.log(term)
+        fitAddon.fit();
+        //term.write('Hello from \x1B[1;3;31mxterm.js\x1B[0m $ ')
+        let url = 'ws://localhost:3000/ws';
+        let sock = new WebSocket(url);
+
+        // Browser -> Backend
+        term.onData((data) => {
+          console.log("-> " + data)
+          sock.send(JSON.stringify({channel: "xterm", payload: data}))
+        });
+
+        sock.onmessage = (evt) => {
+          console.log(evt)
+          console.log("<- " + evt.data)
+          let d = JSON.parse(evt.data)
+
+          if (d.channel == "xterm"){
+            term.write(d.payload)
+          }
+        };
+
+        sock.onopen = () => {
+          console.log("<-->")
+          //let connect = JSON.stringify({channel: "ssh", payload: "connect"})
+          //sock.send(connect)
+        };
+
+        sock.onclose = () => {
+          console.log(">xx<")
+        };
+
+
+      document.getElementById("btnConnect").addEventListener("click", function() {
+        console.log("connect")
+        let connect = JSON.stringify({channel: "ssh", payload: "connect"})
+        sock.send(connect)
+      });
+
+      document.getElementById("btnDisconnect").addEventListener("click", function() {
+        console.log("disconnect")
+        let disconnect = JSON.stringify({channel: "ssh", payload: "disconnect"})
+        sock.send(disconnect)
+      });
+      }, false);
+
+
+
+      </script>
+  </body>
+</html>

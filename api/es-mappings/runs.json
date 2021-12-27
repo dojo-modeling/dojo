@@ -1,0 +1,74 @@
+{
+    "mappings": {
+        "properties": {
+          "attributes": {
+            "type": "object"
+          },
+          "created_at": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "default_run": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "model_id": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "model_name": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword",
+                "ignore_above": 256
+              }
+            }
+          },
+          "parameters": {
+            "properties": {
+              "name": {
+                "type": "text",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  }
+                }
+              },
+              "value": {
+                "type": "text",
+                "fields": {
+                    "numeric": {
+                      "type": "double",
+                      "ignore_malformed": true
+                    },
+                    "date": {
+                      "type": "date",
+                      "ignore_malformed": true
+                    }
+                  }
+              }
+            }
+          }
+        }
+      }
+  }

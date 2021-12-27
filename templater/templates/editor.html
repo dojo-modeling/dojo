@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Edit {{mode}}</title>
+
+        <link rel="icon" href="https://external-content.duckduckgo.com/ip3/gravatar.com.ico">
+
+        <!-- lodash.js -->
+        <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.20/lodash.min.js" integrity="sha256-ur/YlHMU96MxHEsy3fHGszZHas7NzH4RQlD4tDVvFhw=" crossorigin="anonymous"></script>
+
+        <!-- jquery -->
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+
+        <!-- UI helper libraries -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.1/umd/popper.min.js" integrity="sha512-ubuT8Z88WxezgSqf3RLuNi5lmjstiJcyezx34yIU2gAHonIi27Na7atqzUZCOoY4CExaoFumzOsFQ2Ch+I/HCw==" crossorigin="anonymous"></script>
+        <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.3/css/all.css" integrity="sha384-SZXxX4whJ79/gErwcOYf+zWLeJdY/qpuqC4cAa9rOGUstPomtqpuNWT9wdPEn2fk" crossorigin="anonymous">
+
+        <!-- bootstrap -->
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.4.4/angular.min.js" integrity="sha256-S67+hs95eWSvmPvrjoHXIVxdoi+xrvKB938ETkYjITA=" crossorigin="anonymous"></script>
+        <style type="text/css">
+          [ng\:cloak], [ng-cloak], [data-ng-cloak], [x-ng-cloak], .ng-cloak, .x-ng-cloak {
+            display: none !important;
+          }
+      </style>
+
+    </head>
+    <body>
+
+        <div ng-app="BaseApp" ng-controller="MainController as app">
+
+        <section id="editor" class="mode-{{mode}}" ng-cloak>
+            <div class="container">
+                <div class="row">
+                    <div class="col-sm-12">
+                        <h2>
+                            Edit this {{mode}} <small class="text-truncate">{%raw%}{{path}}{%endraw%}</small>
+                            <a href="#" class="btn btn-primary float-right mt-2" ng-click="app.save_params($event)" ng-hide="app.is_iframe()">
+                                <i class="fa fa-save"></i>
+                                Save {{mode}}
+                            </a>
+                        </h2>
+                        <p class="lead">
+                            {% if mode == "config" %}
+                            Click-and-drag on the parts of the configuration file you want to parameterize.
+                            {% elif mode == "directive" %}
+                            Click-and-drag on the <em>values of the parameters</em> in this directive.
+                            {% endif %}
+                        </p>
+                    </div><!--.col-->
+                </div>
+                <div class="row">
+
+                    <div class="col-sm-12"><!-- TODO: file_contents -> editor_content -->
+                        <pre class="card card-body bg-light" id="file_contents"><span class="editor-line" ng-repeat="line in editor_content.split('\n') track by $index">{% raw %}{{line}}{% endraw %}</span></pre>
+                    </div>
+
+                    <div class="card card-body bg-white" id="form-container" ng-style="{'display': app.has_current_selection?'block':'none'}" ng-cloak>
+                        <a href="#" class="close" ng-click="app.close_form($event)">&times;</a>
+                        <p class="lead">Define this parameter</p>
+                        {% raw %}
+                        <form class="form" method="post" ng-submit="app.save_param()" id="param-editor">
+                            <div class="form-group">
+                                <label for="name" class="required">Name</label>
+                                <input type="text" class="form-control" name="name" id="name" ng-model="param.display_name" required="true" autocomplete="off">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="description" class="required">Description</label>
+                                <textarea class="form-control" name="description" id="description" ng-model="param.description" required="true"></textarea>
+                            </div>
+
+                            <div class="form-group">
+                                <i class="far fa-question-circle float-right" data-toggle="tooltip" title="What type of values are users allowed to provide for this parameter? If you are not sure what this means, leave it as 'String / Text'"></i>
+                                <label for="type" class="required">Type</label>
+                                <select class="form-control" name="type" id="type" ng-model="param.type">
+                                    <option value="str">String / Text</option>
+                                    <option value="int">Integer / Whole Number</option>
+                                    <option value="float">Float / Decimal Number</option>
+                                    <option value="boolean">Boolean / True or False</option>
+                                    <option value="date">Date </option>
+                                    <option value="daterange">Date Range</option>
+                                    <option value="geo">Geo</option>
+                                </select>
+                            </div>
+
+                            <div class="row mb-2" ng-if="param.type=='int' || param.type=='float'">
+                                <div class="input-group col">
+                                    <div class="input-group-prepend">
+                                        <label class="input-group-text" for="min">Min</label>
+                                    </div>
+                                    <input type="number" step="{{param.type=='float' ? 'any' : '1'}}" class="form-control" name="min" id="min" ng-model="param.min">
+                                </div>
+                                <div class="input-group col">
+                                    <div class="input-group-prepend">
+                                        <label class="input-group-text" for="max">Max</label>
+                                    </div>
+                                    <input type="number" step="{{param.type=='float' ? 'any' : '1'}}" class="form-control" name="max" id="max" ng-model="param.max">
+                                </div>
+                            </div>
+
+                            <div class="form-group form-check">
+                                <input type="checkbox" class="form-check-input" id="restrict_choices" ng-model="param.restrict_choices">
+                                <label class="form-check-label mb-2" for="restrict_choices">
+                                    Users must choose from a list of pre-defined options
+                                </label>
+
+                                <div class="input-group mb-2" ng-repeat="choice in param.choices track by $index" ng-if="param.restrict_choices">
+                                    <div class="input-group-prepend">
+                                        <span class="input-group-text">#{{$index+1}}</span>
+                                    </div>
+                                    <input type="text" class="form-control" ng-model="param.choices[$index]" ng-change="app.manage_choices($event)">
+                                    <div class="input-group-append">
+                                        <button class="btn btn-sm btn-outline-secondary" ng-click="app.remove_choice($event, $index)" tabindex="-1">
+                                            <i class="fa fa-trash text-danger" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="row mb-3" ng-show="param.restrict_choices">
+                                    <div class="col-8">
+                                        <small class="text-muted choices-warning">Make sure that the choices your specify are valid values for this parameter.</small>
+                                    </div>
+                                    <div class="col-4 text-right">
+                                        <a href="#" ng-click="app.manage_choices($event)">
+                                            <i class="fas fa-plus-circle"></i> Add option
+                                        </a>
+                                    </div>
+                                </div>
+
+
+                            </div>
+
+                            <div class="form-group">
+                                <i class="far fa-question-circle float-right" data-toggle="tooltip" title="If the user leaves this parameter blank when running the model, what value should it default to?"></i>
+                                <label for="default">Default Value</label>
+                                <input type="text" class="form-control" name="default" id="default" ng-model="param.default">
+                            </div>
+
+                            <div class="form-group">
+                                <i class="far fa-question-circle float-right" data-toggle="tooltip" title="Provide a brief name for the unit of this parameter."></i>
+                                <label for="unit">Unit</label>
+                                <input type="text" class="form-control" name="unit" id="unit" ng-model="param.unit">
+                            </div>
+
+                            <div class="form-group">
+                                <i class="far fa-question-circle float-right" data-toggle="tooltip" title="Provide a brief description for the unit of this parameter."></i>
+                                <label for="unit_description">Unit Description</label>
+                                <input type="text" class="form-control" name="unit_description" id="unit_description" ng-model="param.unit_description">
+                            </div>
+
+                            <div class="form-group">
+                                <i class="far fa-question-circle float-right" data-toggle="tooltip" title="What type of scale of measure does this parameter use?"></i>
+                                <label for="data_type" class="required">Data Type</label>
+                                <select class="form-control" name="data_type" id="data_type" ng-model="param.data_type" required>
+                                    <option value="">Please select</option>
+                                    <option value="nominal">nominal</option>
+                                    <option value="ordinal">ordinal</option>
+                                    <option value="numerical">numerical</option>
+                                    <option value="freeform">freeform</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group form-check">
+                                <input type="checkbox" class="form-check-input" id="is_editable" ng-model="param.is_editable">
+                                <label class="form-check-label" for="is_editable">
+                                    Allow users to change this value
+                                </label>
+
+                                <i class="far fa-question-circle float-right" data-toggle="tooltip" title="Should users be allowed to specify custom values for this parameter when they run the model? Only uncheck this if every time the model is run, this parameter uses the exact same hard-coded value, specified by 'Default Value'."></i>
+                            </div>
+
+                            <input type="submit" class="btn btn-primary btn-sm float-right" value="Save">
+
+                            <a href="#" class="btn btn-outline-danger btn-sm" ng-click="app.remove_current_selection_span($event)"ng-show="app.form_mode=='edit'">Remove</a>
+
+                            <a href="#" class="btn btn-link btn-sm" ng-click="app.close_form($event)"ng-show="app.form_mode=='create'">Cancel</a>
+                        </form>
+                        {% endraw %}
+                    </div><!--.col-->
+
+                </div><!--.row-->
+            </div><!--.container-->
+        </section>
+
+        </div><!-- end angular app -->
+
+        <script type="text/javascript">
+            window.js_init = {{ js_init | safe}}
+
+            $(function () {
+                $('[data-toggle="tooltip"]').tooltip()
+            })
+        </script>
+
+        <!-- application-specific code -->
+        <link rel="stylesheet" type="text/css" href="static/styles.css?c={{config.static_last_update}}">
+        <script type="text/javascript" src="static/editor.js?c={{config.static_last_update}}"></script>
+
+    </body>
+</html>

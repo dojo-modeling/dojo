@@ -1,0 +1,5 @@
+.env
+.todo
+*.pyc
+*.sql
+*.log
