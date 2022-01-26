@@ -36,6 +36,7 @@ services:
       - DOJO_URL
       - DMC_LOCAL_DIR
       - DMC_URL
+      - DMC_PORT      
       - DMC_PASSWORD
       - REDIS_HOST
       - DOCKERHUB_USER
