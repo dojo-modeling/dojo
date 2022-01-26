@@ -96,3 +96,8 @@ class RunLogsSchema(BaseModel):
         description="tasks",
         title="tasks",
     )
+
+class RunStatusSchema(Enum):
+    success = "success"
+    running = "running"
+    failed = "failed"
