@@ -16,7 +16,7 @@ from validation import ModelSchema, DojoSchema
 
 from src.settings import settings
 from src.dojo import search_and_scroll, copy_configs, copy_outputfiles, copy_directive, copy_accessory_files
-from src.utils import plugin_action
+from src.utils import plugin_action, run_model_with_defaults
 
 
 router = APIRouter()
@@ -295,4 +295,15 @@ def publish_model(model_id: str, publish_data: ModelSchema.PublishSchema):
     return Response(
         status_code=status.HTTP_200_OK,
         content="Model published",
+    )
+
+@router.post("/models/{model_id}/test")
+def test_model(model_id: str):
+    """
+    This endpoint tests a model's functionality within Dojo.
+    """
+    run_id = run_model_with_defaults(model_id)
+    return Response(
+        status_code=status.HTTP_200_OK,
+        content=f"Model test run submitted with run id {run_id}",
     )
