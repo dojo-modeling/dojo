@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+
+	<script src="https://code.jquery.com/jquery-latest.min.js"
+		crossorigin="anonymous"></script>
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js"
+		integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49"
+		crossorigin="anonymous"></script>
+	<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js"
+		integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy"
+		crossorigin="anonymous"></script>
+	<!-- Bootstrap CSS -->
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css"
+		integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+	<!-- Latest compiled and minified CSS -->
+	<link rel="stylesheet"
+		href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.13.14/dist/css/bootstrap-select.min.css">
+	<!-- Latest compiled and minified JavaScript -->
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap-select@1.13.14/dist/js/bootstrap-select.min.js"></script>
+	<!-- (Optional) Latest compiled and minified JavaScript translation files -->
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap-select@1.13.14/dist/js/i18n/defaults-am_ET.min.js"></script>
+	<link rel="preconnect" href="https://fonts.gstatic.com">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" />
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.13.18/js/bootstrap-select.min.js"
+		integrity="sha512-yDlE7vpGDP7o2eftkCiPZ+yuUyEcaBwoJoIhdXv71KZWugFqEphIS3PU60lEkFaz8RxaVsMpSvQxMBaKVwA5xg=="
+		crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/js/bootstrap-datepicker.min.js"
+		integrity="sha512-T/tUfKSV1bihCnd+MxKD0Hm1uBBroVYBOYSk1knyvQ9VyZJpc/ALb4P0r6ubwVPSGB2GvjeoMAJJImBG12TiaQ=="
+		crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/js/bootstrap-datepicker.min.js"
+		integrity="sha512-T/tUfKSV1bihCnd+MxKD0Hm1uBBroVYBOYSk1knyvQ9VyZJpc/ALb4P0r6ubwVPSGB2GvjeoMAJJImBG12TiaQ=="
+		crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+	<title>Dojo Data Workflow</title>
+	<style>
+
+		select {
+			-moz-appearance: none;
+			background: rgba(0, 0, 0, 0) url("https://i.stack.imgur.com/tLwVk.png") no-repeat scroll 100% center / 20px 13px !important;
+			border: 1px solid #ccc;
+			overflow: hidden;
+			padding: 6px 20px 6px 6px !important;
+			width: auto;
+		}
+
+		button {
+			margin-bottom: 10%;
+		}
+	</style>
+	<meta name="description" content="Description Goes Here">
+	<script>
+		$(document).on('click', 'input', function () {
+			console.log('focus')
+		});
+
+
+		$(document).ready(function (e) {
+			$('.selectpicker').selectpicker();
+		});
+
+		async function bands() {
+			var geotiffExtension = `
+				<div id='Geotiff_form'>
+					</div>
+					<div class="form-group">
+						<label for='geotiff_Feature_Name'>Feature name:</label>
+						<input class="form-control"
+						type="text"
+						name="geotiff_Feature_Name" id='Feature_name'
+						/>
+					</div>
+					<br/>
+					<div class="form-group">
+						<label for='geotiff_Null_Val'>Null data value:</label>
+						<input class="form-control"
+						type="text"
+						name="geotiff_Null_Val" id='geotiff_Null_Val' value = -9999
+						/>
+					</div>
+					<br/>
+					<div class="form-group">
+						<label for='geotiff_Date'>Date (optional):</label>
+						<input class="form-control"
+						type="text"
+						name="geotiff_Date" id='geotiff_Date'
+						/>
+					</div>
+				</div>`
+			document.getElementById("submit").disabled = true;
+			var f = document.getElementById("myFile").files[0]
+			let formData = new FormData();
+			formData.append("file", f);
+			fetch('/overview/proxy/bands', { method: "POST", body: formData }).then(function (bands) {
+				return bands.json()
+				// here you can use the result of promiseB
+			}).then(function (response) {
+				var num_bands = parseInt(response['num_bands'])
+				window.num_bands = num_bands
+
+
+				if (num_bands < 2) {
+					document.getElementById("formExtension").innerHTML = geotiffExtension;
+					document.getElementById("submit").disabled = false;
+					return
+				}
+
+				console.log(num_bands)
+
+
+				var band_representation_dropdown = `<div class="form-group">
+	<label for="band_type">The dimensions of my geotiff bands repesent</label>
+	<select id="band_type" onchange="geotiffFormTime()" name="band_type" class="selectpicker">
+		<option value="category">category</option>
+		<option value="datetime">temporal</option>
+	</select></div>
+	<div id="band_names">
+	</div>
+	`
+
+				document.getElementById("formExtension").innerHTML = band_representation_dropdown;
+				geotiffFormTime()
+			}
+			);
+		}
+
+		async function geotiffFormTime() {
+			var featureName = `<label for="Feature_name"> Enter feature name: </label> <input type="text" id="Feature_name" name="Feature_name" style="margin-bottom:10%" class="form-control" placeholder="feature_name"/>`
+			var date = `<label for="Feature_name"> Enter dataset date: </label> <input required style="margin-bottom:10%" type="text" id="date" name="date" class="form-control" placeholder="DD/MM/YYYY"/>`
+			var rep = document.getElementById('band_type').value
+
+			console.log(rep)
+			if (rep == 'datetime') {
+				var lines = featureName
+			}
+			else { var lines = date }
+
+			for (var i = 1; i <= window.num_bands; i++) {
+				var rep = document.getElementById('band_type').value
+				var b_i = 'multiband_' + i
+				var label_i = 'Band ' + i
+
+				var form_control = '<div class=form-group>'
+
+				var l = `<label for='` + b_i + `'>` + label_i + ` Name </label>`
+
+				if (rep == "datetime")
+					{var inp = `<input type="text" name="` + b_i + `" id="` + b_i + `" placeholder='DD/MM/YYYY' class="form-control"/>`}
+				else{
+					var inp = `<input type="text" name="` + b_i + `" id="` + b_i + `" class="form-control"/>`
+				}
+
+
+				var line = l + form_control + inp + '</div>'
+				lines = lines + line
+			}
+			document.getElementById("band_names").innerHTML = lines
+			document.getElementById("submit").disabled = false;
+			$('.selectpicker').selectpicker();
+		}
+
+
+
+		async function nextDate(start_date, increment) {
+			num_inc = 1
+			console.log(start_date)
+			var date = new Date(start_date)
+			console.log('enter')
+			console.log(date.getMonth() + '/' + date.getDate() + '/' + date.getFullYear())
+			var year = date.getFullYear()
+			var month = date.getMonth()
+			var day = date.getDate()
+
+			if (increment == 'Year') {
+				date.setFullYear(year + num_inc)
+			}
+
+			if (increment == 'Month') {
+				date.setMonth(month + num_inc)
+			}
+
+			if (increment == 'Day') {
+				date.setDate(day + num_inc)
+			}
+
+			console.log(date.getMonth() + '/' + date.getDate() + '/' + date.getFullYear())
+			console.log('exit')
+			var month = date.getMonth() + 1
+			return month + '/' + date.getDate() + '/' + date.getFullYear()
+		}
+		async function populateDates() {
+			console.log('start')
+			console.log(document.getElementById("multiband_1").value)
+			var date_to_write = new Date(document.getElementById("multiband_1").value)
+			var month = date_to_write.getMonth() + 1
+			date_to_write = month + '/' + date_to_write.getDate() + '/' + date_to_write.getFullYear()
+			var increment = document.getElementById("multiband_date_increment").value
+
+			for (var i = 1; i <= window.num_bands; i++) {
+				var b_i = 'multiband_' + i
+				document.getElementById(b_i).value = date_to_write
+				date_to_write = await nextDate(date_to_write, increment)
+			}
+		}
+
+		async function excelSheets() {
+			document.getElementById("submit").disabled = true;
+			var f = document.getElementById("myFile").files[0]
+			let formData = new FormData();
+			formData.append("file", f);
+			fetch('/overview/proxy/sheets', { method: "POST", body: formData }).then(function (sheets) {
+				return sheets.json()
+				// here you can use the result of promiseB
+			}).then(function (response) {
+				var sheets = response['sheets']
+				var el = "<label for='sheets_dropdown'> Sheets </label>"
+				el += '<select name="excel_Sheet" class="form-control" id="sheets_dropdown">'
+				var options = []
+				for (var i = sheets.length - 1; i >= 0; i--) {
+					var line = '<option value="' + sheets[i] + '">' + sheets[i] + '</option>';
+					el = el + line;
+				}
+				el = el + '</select>'
+				document.getElementById("formExtension").innerHTML = el;
+				document.getElementById("submit").disabled = false;
+			});
+		}
+	</script>
+	<style>
+		.modal-content {
+			display: flex;
+			justify-content: center;
+			/* horizontal */
+			align-items: center;
+			/* vertical */
+		}
+
+
+		* {
+			font-family: "Roboto", "Helvetica", "Arial", sans-serif;
+		}
+
+		#formExtension {
+			margin-bottom: 0%;
+		}
+
+
+
+		body {
+			text-align: center;
+			margin-top: 5%;
+		}
+
+		h4 {
+			text-align: left;
+			margin-top: 5%;
+			color: rgb(107, 107, 107);
+		}
+
+		form {
+			display: inline-block;
+			text-align: left;
+		}
+
+		button {
+			margin-top: 2%;
+		}
+        input, textarea {
+            max-width: 71%;
+        }
+	</style>
+	<script type="text/javascript">
+
+		function up() {
+			window.location.replace('/upload')
+		}
+		function select_picker() {
+			$(".selectpicker").selectpicker();
+		}
+
+		function fileDetect() {
+			var file = document.getElementById("myFile");
+			var xlsxExtension = `
+				<div class="form-group">
+					<label for='excel_Sheet'>Sheet</label>
+					<div id="sheets">
+					</div>
+				</div>`
+			if (file.value.toLowerCase().endsWith('.tiff') || file.value.toLowerCase().endsWith('.tif')) {
+				bands()
+			}
+			else if (file.value.toLowerCase().endsWith('.xls') || file.value.toLowerCase().endsWith('.xlsx')) {
+				excelSheets();
+			}
+			else { document.getElementById("formExtension").innerHTML = ""; }
+			// Inside find search element where the name should display (by Id Or Class)
+
+		}
+
+		</script>
+	</head>
+	<body>
+		<h1>Dojo Data Registration</h1>
+		<form id='meta' method='post' style='width:45%; margin-top:2%; margin-left:10%;' enctype="multipart/form-data">
+			<h4> Data Information </h4>
+			{% csrf_token %}
+
+			<div class="form-group">
+				<label for='dataset_Name'>Name</label>
+				<input class="form-control" type="text" name='dataset_Name' id="dataset_Name"
+					placeholder="What is the name of the dataset?" required />
+			</div>
+			<div class="form-group">
+				<label for='dataset_Description' required>Description</label>
+				<textarea class="form-control" name="dataset_Description" wrap="soft" id="dataset_Description" rows="3"
+					placeholder="Please provide a description of the dataset." required></textarea>
+			</div>
+			<div class="form-group">
+				<label for='dataset_Domains'>Domains</label><br/>
+				{% for domain in domains %}
+				<span style="background: rgba(0, 98, 204, 0.3); border-radius: 1em; padding: 0.2em 1em 0; margin: 0.2em 0; display: inline-block;"
+					for="domain_{{domain}}" onclick="$('#' + this.getAttribute('for')).change();"
+				>
+					<input type="checkbox" id="domain_{{domain}}" name="dataset_Domains" value="{{domain}}" />
+					<label for="domain_{{domain}}">{{domain}}</label>
+				</span>
+				{% endfor %}
+			</div>
+			<h4> Resolution </h4>
+
+			<div class="form-group">
+
+				<label for="resolution_temporal">Temporal resolution:</label>
+				<select id="resolution_temporal" name="resolution_temporal" class="selectpicker">
+					<option value="annual">annual</option>
+					<option value="monthly">monthly</option>
+					<option value="weekly">weekly</option>
+					<option value="daily">daily</option>
+					<option value="dekad">dekad</option>
+					<option value="other">other</option>
+				</select>
+
+			</div>
+			<div class="form-group">
+				<label for='resolution_spatial_x'>X resolution (meters)</label>
+				<input type="number" step="0.01" class="form-control" name="resolution_spatial_x" wrap="soft"
+					id="resolution_spatial_x" placeholder="Spatial resolution of your data (meters)"></input>
+				<label for='resolution_spatial_y'>Y resolution (meters)</label>
+				<input type="number" step="0.01" class="form-control" name="resolution_spatial_y" wrap="soft"
+					id="resolution_spatial_y" placeholder="Spatial resolution of your data (meters)"></input>
+			</div>
+			<h4 id='maint'>Data Quality and Sensitivity</h4>
+            <div class="form-group">
+                <label for='dataset_Sensitivity'>Data Sensitivity</label>
+                <textarea class="form-control" type="text" name="dataset_Sensitivity" id="dataset_Sensitivity" wrap="soft" rows="2"
+                    placeholder="Describe any restrictions on usage of this data, sensitivity associated with the data, or confidentiality concerns."></textarea >
+            </div>
+            <div class="form-group">
+                <label for='dataset_Quality'>Data Quality</label>
+                <textarea class="form-control" type="text" name="dataset_Quality" id="dataset_Quality" wrap="soft" rows="2"
+                    placeholder="Specify if data is measured, derived, or estimated. Indicate any known data quality issues and/or describe data collection methodology."></textarea >
+			</div>
+
+			<h4 id='maint' style="margin-top:7%;"> Your Contact Information</h4>
+			<div class="form-group">
+				<label for='maintainer_Name'>Registerer Name (Organization)</label>
+				<input class="form-control" type="text" name="maintainer_Name" id="maintainer_Name" placeholder="Dataset registerer name and/or organization" required/>
+			</div>
+
+			<div class="form-group">
+				<label for='Email'>Registerer Email</label>
+				<input class="form-control" type="email" name="maintainer_Email" id="maintainer_Email" placeholder="registerer@organization.org" required/>
+			</div>
+			<div class="form-group">
+				<label for='maintainer_Organization'>Source Organization</label>
+				<input class="form-control" type="text" name="maintainer_Organization" id="maintainer_Organization" placeholder="Source organization name"/>
+			</div>
+			<div class="form-group">
+				<label for='maintainer_Website'>Source Website</label>
+				<input class="form-control" type="url" name="maintainer_Website" id="maintainer_Website" placeholder="http://source.org"/>
+			</div>
+			<div class="form-group">
+				<label for="myFile">File</label>
+				<input class="form-control" type="file" id="myFile" name="filename" onchange="fileDetect()" required>
+			</div>
+			<div class='form-group' id='formExtension'>
+			</div>
+			<div class="text-center">
+				<button class='btn btn-primary' id="submit" type="submit" form="meta" value="Submit">Submit</button>
+			</div>
+		</form>
+	</body>
+</html>

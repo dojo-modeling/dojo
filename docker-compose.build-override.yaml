@@ -12,8 +12,8 @@ services:
     networks:
       - dojo
   processor:
-    environment:
-      - REDIS_HOST
+    env_file:
+      - envfile
     networks:
       - dojo
   templater:

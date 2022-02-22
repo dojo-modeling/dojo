@@ -83,7 +83,7 @@ p {
     const completionUrl = '{{ completion_url }}';
     const taskStatusUrl = '{{ task_status_url }}';
     const jobId = '{{ job_id }}';
-
+    const errorUrl = '{{ error_url }}';
     function fix_url(url) {
         let result;
         if (/^\//.test(url)) {
@@ -108,6 +108,7 @@ p {
         let status = {
             isFailed: false,
             isDone: false,
+            isError: false,
             jobError: "",
         };
         let result = $.ajax(finalTaskStatusUrl, {async: false});
@@ -126,6 +127,10 @@ p {
         }
         else if (status.isDone) {
             let finalUrl = fix_url(completionUrl);
+            document.location = finalUrl;
+        }
+        else if (status.isError) {
+            let finalUrl = fix_url(errorUrl);
             document.location = finalUrl;
         }
         else{

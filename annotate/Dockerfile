@@ -1,4 +1,4 @@
-FROM jataware/mixmasta:0.6.4
+FROM jataware/mixmasta:0.6.5
 
 RUN pip3 install --upgrade pip
 COPY ./requirements.txt /annotate/requirements.txt

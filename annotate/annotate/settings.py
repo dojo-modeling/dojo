@@ -16,10 +16,13 @@ import os
 ANNOTATION_S3_BUCKET = os.environ.get("ANNOTATION_S3_BUCKET", "YOUR S3 BUCKET")
 ANNOTATION_S3_PATH = os.environ.get("ANNOTATION_S3_PATH", "dev/indicators")
 DOJO_URL = os.environ.get("DOJO_URL", "http://DOJO_URL.COM")
+UI_URL = os.environ.get("UI_URL",  "http://localhost:8080")
 DOJO_USERNAME = os.environ.get("DOJO_USERNAME", None)
 DOJO_PASSWORD = os.environ.get("DOJO_PASSWORD", None)
 AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "AWS ACCESS KEY GOES HERE")
-AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "AWS SECRET KEY GOES HERE")
+AWS_SECRET_ACCESS_KEY = os.environ.get(
+    "AWS_SECRET_ACCESS_KEY", "AWS SECRET KEY GOES HERE"
+)
 DJANGO_LOG_LEVEL = os.environ.get("DJANGO_LOG_LEVEL", "INFO")
 TERMINAL_API_ENDPOINT = os.environ.get("TERMINAL_API_ENDPOINT", "http://localhost:3000")
 REDIS_HOST = os.environ.get("REDIS_HOST", "redis")
@@ -57,10 +60,8 @@ ALLOWED_HOSTS = [
 
 INSTALLED_APPS = [
     "gadm.GADMLoaderConfig",
-    "conversions",
-    "byod",
-    "byom",
-    "process",
+    "metadata_collection",
+    "annotation",
     "tasks",
     "django_rq",
     "django.contrib.admin",
@@ -153,10 +154,12 @@ STATIC_URL = "/static/"
 # STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 STATICFILES_DIRS = (os.path.join(BASE_DIR, "static/"),)
 
+
 def skip_date_validation(record):
     # if record.args[0].startswith('GET /overview/proxy/date'):
     #         return False
     return True
+
 
 CACHES = {
     "default": {
@@ -170,9 +173,9 @@ CACHES = {
 }
 
 RQ_QUEUES = {
-    'default': {
+    "default": {
         "URL": f"{REDIS_URL}/1",
-        'DEFAULT_TIMEOUT': 1200,  # 20 minutes
+        "DEFAULT_TIMEOUT": 1200,  # 20 minutes
     },
 }
 

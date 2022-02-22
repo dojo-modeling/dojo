@@ -15,21 +15,25 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include, re_path
-from byod.views import download_csv, GeotimeAnalyzeLoader, GeotimeAnalyzeStatus, MaintainerView
-from byom.views import SplashView
-from process.proxy_views import handle_init_version
+from annotation.proxy_views import handle_init_version
+from metadata_collection.indicator import Indicator
+from metadata_collection.load_data import LoadData
+from metadata_collection.model_output import ModelOutput
+from metadata_collection.helper_functions import download_csv
+from processing.views import PreProcessing, PreProcessingStatus
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", MaintainerView.as_view()),
-    # path("loading", loading),
-    path("analyze/<uuid>", GeotimeAnalyzeLoader.as_view()),
-    path("analyze/<uuid>/status", GeotimeAnalyzeStatus.as_view()),
-    path("overview", include("process.urls")),
-    # path("byom", splash),
-    path("byom", SplashView.as_view()),
+    path("analyze/<uuid>", PreProcessing.as_view()),
+    path("analyze/<uuid>/status", PreProcessingStatus.as_view()),
+    path("overview", include("annotation.urls")),
+    path("byom", ModelOutput.as_view()),
+    path("model-output", ModelOutput.as_view()),
+    path("", Indicator.as_view()),
+    path("model_output", ModelOutput.as_view()),
+    #path("load-data", LoadData.as_view()),
     path("download/<uuid>", download_csv),
-    path('django-rq/', include('django_rq.urls')),
+    path("django-rq/", include("django_rq.urls")),
     path("version", handle_init_version),
 ]
 
