@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import AddCircleOutlineIcon from '@material-ui/icons/AddCircleOutline';
 import Autocomplete from '@material-ui/lab/Autocomplete';
@@ -24,6 +24,8 @@ import ModelRegionMap from './ModelRegionMap';
 
 const useStyles = makeStyles((theme) => ({
   buttonContainer: {
+    display: 'flex',
+    justifyContent: 'space-between',
     marginTop: theme.spacing(1),
     '& :first-child': {
       marginRight: theme.spacing(1),
@@ -95,6 +97,7 @@ function ModelRegionForm({
   const [mapCoords, setMapCoords] = useState(storedCoords);
   const [showMap, setShowMap] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const initialLoad = useRef(true);
 
   const search = (query) => {
     const options = {
@@ -137,6 +140,32 @@ function ModelRegionForm({
     // and store mapCoords so we can repopulate the box and the map
     handleBack({ ...regions, selectedRegions, storedCoords: mapCoords });
   };
+
+  // This is where we interact with localStorage - to save state & if there is saved state
+  // though saved state will usually be passed in by the parent ModelFormStepper
+  useEffect(() => {
+    // don't do this when we first load the component
+    if (initialLoad.current) {
+      initialLoad.current = false;
+      return;
+    }
+
+    // parse the entered form data to fit what the parent wants
+    const regions = parseRegions(selectedRegions, mapCoords);
+
+    // fetch from localstorage in case we missed something
+    const storedModel = localStorage.getItem('modelInfo');
+    const parsedModel = JSON.parse(storedModel);
+    // combine everything into one object
+    const combinedModel = {
+      ...parsedModel, regions, selectedRegions, storedCoords: mapCoords
+    };
+
+    // no need to debounce this, as it takes a lot of clicks before these get updated
+    // and pass it back to localStorage so that we can get it again in the future
+    localStorage.setItem('modelStep', 2);
+    localStorage.setItem('modelInfo', JSON.stringify(combinedModel));
+  }, [mapCoords, selectedRegions]);
 
   const clearAutocomplete = () => {
     setSearchQuery('');

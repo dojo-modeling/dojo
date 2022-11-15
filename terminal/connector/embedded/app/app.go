@@ -8,10 +8,10 @@ import (
 )
 
 var (
-	addr          = flag.String("addr", ":6010", "http service address")
-	SETTINGS_FILE = flag.String("settings", "settings.yaml", "settings file")
-	LOGGER_FLAGS  = log.Ldate | log.Ltime | log.Lshortfile
-	LOGGER        = log.New(os.Stderr, "", LOGGER_FLAGS)
+	addr         = flag.String("addr", ":6010", "http service address")
+	DEV_MODE     = flag.Bool("dev", false, "run in dev mode")
+	LOGGER_FLAGS = log.Ldate | log.Ltime | log.Lshortfile
+	LOGGER       = log.New(os.Stderr, "", LOGGER_FLAGS)
 )
 
 type BuildInfo struct {
@@ -25,14 +25,16 @@ var (
 )
 
 func setup() *gin.Engine {
-	settings := NewSettings(*SETTINGS_FILE)
 	pool := NewPool()
 	go pool.Start()
 
-	historyServer := NewHistorySocketServer(pool, settings)
+	historyServer := NewHistorySocketServer(pool)
 	go historyServer.Listen()
 
-	engine := SetupRoutes(pool, settings, historyServer)
+	cliServer := NewCliSocketServer(pool)
+	go cliServer.Listen()
+
+	engine := SetupRoutes(pool)
 	return engine
 }
 

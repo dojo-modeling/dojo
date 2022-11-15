@@ -11,7 +11,7 @@ const useStyles = makeStyles((theme) => ({
   },
 }));
 function FormikTextField({
-  name, label, formik, ...props
+  name, label, formik, disabled, ...props
 }) {
   const classes = useStyles();
   // apply our three default props to make the default formik textfield
@@ -26,6 +26,7 @@ function FormikTextField({
       fullWidth
       id={name}
       name={name}
+      disabled={disabled}
       label={label}
       /* Use lodash.get() to handle nested object names, eg 'maintainer.website' */
       value={get(formik, `values.${[name]}`)}

@@ -15,7 +15,7 @@ import Typography from '@material-ui/core/Typography';
 
 import { makeStyles } from '@material-ui/core/styles';
 
-import { useDirective } from './SWRHooks';
+import { useDirective, useModel } from './SWRHooks';
 
 const useStyles = makeStyles((theme) => ({
   root: {
@@ -48,16 +48,10 @@ const EndSessionDialog = ({
 
   const classes = useStyles();
   const { directive } = useDirective(model.id);
+  const { mutateModel } = useModel(model.id);
 
   const handleClose = () => {
-    if (published) {
-      // if we just published, we call the parent's afterPublish cleanup function
-      // and pass in our function to close the dialog
-      afterPublish(() => setOpen(false));
-    } else {
-      // otherwise just close the dialog
-      setOpen(false);
-    }
+    setOpen(false);
   };
 
   const handleCommitMsg = (event) => {
@@ -69,6 +63,11 @@ const EndSessionDialog = ({
       commit_message: commitMessage
     }).then(() => {
       setPublished(true);
+
+      // forcibly set is_published locally to disable the navigate away warning
+      mutateModel({ ...model, is_published: true, }, false);
+      // call the summary page after publish handler
+      afterPublish();
       // register model
       axios.post(`/api/dojo/models/register/${model.id}`).catch((error) => {
         console.log('There was an error registering the model: ', error);
@@ -113,7 +112,7 @@ const EndSessionDialog = ({
         >
           <NavigateNextIcon className={classes.nextIcon} />
           {' '}
-          <span>{ directive ? directive.command_raw : 'No directive entered' }</span>
+          <span>{ directive ? directive.command : 'No directive entered' }</span>
         </DialogContentText>
         <TextField
           className={classes.textArea}

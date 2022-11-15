@@ -1,187 +1,31 @@
-import React, {
-  useEffect,
-  useState,
-} from 'react';
+import React, { useEffect, useState } from 'react';
 
 import DeleteIcon from '@material-ui/icons/Delete';
+import ExpandLessIcon from '@material-ui/icons/ExpandLess';
+import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 
 import Button from '@material-ui/core/Button';
+import ButtonBase from '@material-ui/core/ButtonBase';
+import Collapse from '@material-ui/core/Collapse';
 import IconButton from '@material-ui/core/IconButton';
-import Paper from '@material-ui/core/Paper';
 import Table from '@material-ui/core/Table';
 import TableBody from '@material-ui/core/TableBody';
 import TableCell from '@material-ui/core/TableCell';
 import TableContainer from '@material-ui/core/TableContainer';
-import TableHead from '@material-ui/core/TableHead';
 import TableRow from '@material-ui/core/TableRow';
 import Tooltip from '@material-ui/core/Tooltip';
 import Typography from '@material-ui/core/Typography';
 
-import { makeStyles } from '@material-ui/core/styles';
+import { makeStyles, } from '@material-ui/core/styles';
 
-import BasicAlert from './BasicAlert';
-import { useContainerWithWorker, useDirective, useShellHistory } from './SWRHooks';
+import HelperTip from './HelperTip';
 
-import {
-  useWebSocketUpdateContext,
-} from '../context';
-
-const storeFileRequest = async (info) => {
-  const rsp = await fetch('/api/dojo/terminal/file', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(info)
-  });
-
-  if (!rsp.ok) {
-    throw new Error(`Failed to send file info ${rsp.status}`);
-  }
-
-  return rsp.json();
-};
-
-const storeAccessoryRequest = async (info) => {
-  const rsp = await fetch('/api/dojo/dojo/accessories', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json'
-    },
-    body: JSON.stringify(info)
-  });
-
-  if (!rsp.ok) {
-    throw new Error(`Failed to send accessory info ${rsp.status}`);
-  }
-
-  return rsp;
-};
-
-export const ContainerWebSocket = ({
-  workerNode,
-  setEditorContents, openEditor,
-  setIsTemplaterOpen, setTemplaterContents, setTemplaterMode,
-  setAnnotateUrl, setIsAnnotateOpen, setAnnotateFile
-}) => {
-  const { register, unregister } = useWebSocketUpdateContext();
-  const [accessoryAlert, setAccessoryAlert] = useState(false);
-
-  const { container } = useContainerWithWorker(workerNode);
-
-  const { mutateShellHistory } = useShellHistory(container?.id);
-
-  useEffect(() => {
-    const onMessage = () => {
-      mutateShellHistory();
-    };
-
-    const onBlocked = async (data) => {
-      const { command, cwd } = JSON.parse(data);
-      const s = command.trim();
-      if (s.startsWith('edit ')) {
-        const p = `${s.substring(5)}`;
-        const f = (p.startsWith('/')) ? p : `${cwd}/${p}`;
-        const rsp = await fetch(
-          `/api/terminal/container/${workerNode}/ops/cat?path=${encodeURIComponent(f)}`
-        );
-        if (rsp.ok) {
-          setEditorContents({ text: await rsp.text(), file: f });
-          openEditor();
-        }
-      } else if (s.startsWith('config ')) {
-        // get file path user specified
-        const path = `${s.substring('config '.length)}`;
-        const fullPath = (path.startsWith('/')) ? path : `${cwd}/${path}`;
-
-        // load that file's contents
-        const rsp = await fetch(
-          `/api/terminal/container/${workerNode}/ops/cat?path=${encodeURIComponent(fullPath)}`
-        );
-        if (rsp.ok) {
-          const fileContent = await rsp.text();
-          // pass them along to templater
-          setTemplaterContents({
-            editor_content: fileContent,
-            content_id: fullPath,
-          });
-          // set the mode to config rather than directive
-          setTemplaterMode('config');
-          setIsTemplaterOpen(true); // open the <FullScreenDialog>
-        }
-      } else if (s.startsWith('tag ')) {
-        const p = `${s.substring(4)}`;
-        const f = (p.startsWith('/')) ? p : `${cwd}/${p}`;
-
-        const { id: reqid } = await storeFileRequest({
-          model_id: container?.model_id,
-          file_path: f,
-          request_path: `/container/${workerNode}/ops/cat?path=${encodeURIComponent(f)}`
-        });
-
-        setAnnotateFile(`${f}`);
-        setAnnotateUrl(`/api/annotate/byom?reqid=${reqid}`);
-        setIsAnnotateOpen(true);
-      } else if (s.startsWith('accessory ')) {
-        const p = `${s.substring(10)}`;
-        const f = (p.startsWith('/')) ? p : `${cwd}/${p}`;
-        const f_ = (f.includes(' ')) ? f.split(' ')[0] : f;
-        const c = (f.includes(' ')) ? p.split(' ').slice(1, p.split(' ').length).join(' ').replaceAll('"', '') : null;
-
-        await storeAccessoryRequest({
-          model_id: container?.model_id,
-          path: f_,
-          caption: c
-        }).then(() => setAccessoryAlert(true));
-      }
-    };
-
-    if (container?.id) {
-      register('term/message', onMessage);
-      register('term/blocked', onBlocked);
-    }
-
-    return (() => {
-      unregister('term/message', onMessage);
-      unregister('term/blocked', onBlocked);
-    });
-  }, [
-    mutateShellHistory,
-    container,
-    openEditor,
-    register,
-    unregister,
-    setEditorContents,
-    setIsTemplaterOpen,
-    setTemplaterContents,
-    setTemplaterMode,
-    setAnnotateFile,
-    setAnnotateUrl,
-    setIsAnnotateOpen,
-    workerNode
-  ]);
-
-  return (
-    <>
-      <BasicAlert
-        alert={{
-          message: 'Your accessory was successfully added',
-          severity: 'success',
-        }}
-        visible={accessoryAlert}
-        setVisible={setAccessoryAlert}
-      />
-    </>
-  );
-};
+import { useDirective, useShellHistory } from './SWRHooks';
 
 const useStyles = makeStyles((theme) => ({
   root: {
-    backgroundColor: 'rgb(128, 128, 128, .25)',
-    color: '#fff',
+    backgroundColor: 'inherit',
     margin: [[theme.spacing(2), 0]],
-    padding: theme.spacing(2),
   },
   table: {
     borderCollapse: 'separate',
@@ -206,29 +50,48 @@ const useStyles = makeStyles((theme) => ({
       borderColor: 'rgba(255, 255, 255, .1)',
     },
   },
+  tableContainer: {
+    overflow: 'auto',
+    padding: [[0, theme.spacing(1), theme.spacing(1)]],
+    [theme.breakpoints.down('xl')]: {
+      height: '260px',
+    },
+    [theme.breakpoints.up('xl')]: {
+      height: '400px',
+    },
+  },
   iconButton: {
     padding: '1px',
     margin: 0,
     color: 'white'
   },
+  titleWrapper: {
+    color: 'white',
+    display: 'flex',
+    justifyContent: 'center',
+    width: '100%',
+    gap: theme.spacing(2),
+  },
 }));
 
-export const ShellHistory = ({
-  container,
-  setIsTemplaterOpen,
+const ShellHistory = ({
+  modelId,
+  setTemplaterOpen,
   setTemplaterMode,
   setTemplaterContents,
 }) => {
   const classes = useStyles();
+
   const tableRef = React.createRef(null);
+  const [expanded, setExpanded] = useState(true);
 
   const {
     shellHistory, shellHistoryLoading, shellHistoryError, mutateShellHistory
-  } = useShellHistory(container?.id);
-  const { directive } = useDirective(container?.model_id);
+  } = useShellHistory(modelId);
+  const { directive } = useDirective(modelId);
 
   const removeItem = async (item) => {
-    const resp = await fetch(`/api/dojo/terminal/container/${container?.id}/history/${item.idx}`,
+    const resp = await fetch(`/api/dojo/terminal/container/history/${modelId}/${item.idx}`,
       { method: 'DELETE' });
     if (resp.ok) {
       mutateShellHistory();
@@ -242,10 +105,8 @@ export const ShellHistory = ({
   }, [shellHistory, tableRef]);
 
   const handleAnnotationClick = async (item) => {
-    // toggle <TemplaterEditor> to open in <App>, which loads the iframe
-    setIsTemplaterOpen(true);
-    // set mode to directive before we load in content
-    // or we get [Object][Object] showing in the iframe before content loads
+    // open the FullScreenTemplater
+    setTemplaterOpen(true);
     setTemplaterMode('directive');
     setTemplaterContents({
       editor_content: item.command,
@@ -254,10 +115,14 @@ export const ShellHistory = ({
     });
   };
 
+  const handleExpandClick = () => {
+    setExpanded((prev) => !prev);
+  };
+
   const isDirective = (command) => {
     if (!directive) return false;
 
-    return command === directive.command_raw;
+    return command === directive.command;
   };
 
   const displayHistoryItems = () => {
@@ -342,38 +207,36 @@ export const ShellHistory = ({
   };
 
   return (
-    <Paper className={classes.root}>
-      <TableContainer style={{ height: '400px', overflow: 'auto' }}>
-        <Table
-          aria-labelledby="tableTitle"
-          aria-label="enhanced table"
-          className={classes.table}
-          stickyHeader
-        >
-          <TableHead>
-            <TableRow className={classes.tableHead}>
-              <TableCell colSpan={2} style={{ border: 0, borderRadius: '4px' }}>
-                <Typography
-                  component="div"
-                  style={{
-                    fontSize: '1.2rem',
-                    lineHeight: '1.0',
-                    padding: '5px 0 7px 10px',
-                    color: '#fff',
-                    margin: '0 auto',
-                  }}
-                  align="center"
-                >
-                  Shell History
-                </Typography>
-              </TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody ref={tableRef} className={classes.tableBody}>
-            {displayHistoryItems()}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    </Paper>
+    <div className={classes.root}>
+      <ButtonBase className={classes.titleWrapper} onClick={handleExpandClick}>
+        <Typography variant="h6" align="center">
+          <HelperTip
+            title="A history of all terminal commands entered in this session.
+              You can permanently remove commands by clicking the trash can icon,
+              or choose to mark a command as the model execution directive by clicking
+              Mark Directive."
+          >
+            Shell History
+          </HelperTip>
+        </Typography>
+        {expanded ? <ExpandMoreIcon fontSize="large" color="inherit" />
+          : <ExpandLessIcon fontSize="large" color="inherit" />}
+      </ButtonBase>
+      <Collapse in={expanded}>
+        <TableContainer className={classes.tableContainer}>
+          <Table
+            aria-labelledby="tableTitle"
+            aria-label="enhanced table"
+            className={classes.table}
+          >
+            <TableBody ref={tableRef} className={classes.tableBody}>
+              {displayHistoryItems()}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Collapse>
+    </div>
   );
 };
+
+export default ShellHistory;

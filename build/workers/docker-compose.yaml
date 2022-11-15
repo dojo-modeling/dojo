@@ -4,8 +4,6 @@ services:
     build: .
     container_name: docker
     expose:
-      - "2375"
-      - "2376"
       - "8375"
     privileged: true
     volumes:

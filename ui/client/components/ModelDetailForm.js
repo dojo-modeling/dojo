@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 import * as yup from 'yup';
+
+import Autocomplete from '@material-ui/lab/Autocomplete';
 import Button from '@material-ui/core/Button';
 
 import DateFnsUtils from '@date-io/date-fns';
@@ -8,9 +10,9 @@ import {
   MuiPickersUtilsProvider,
 } from '@material-ui/pickers';
 
-import { ChipInput } from 'material-ui-formik-components/ChipInput';
 import { KeyboardDatePicker } from 'material-ui-formik-components/KeyboardDatePicker';
-import { RadioGroup } from 'material-ui-formik-components/RadioGroup';
+import TextField from '@material-ui/core/TextField';
+import axios from 'axios';
 import { makeStyles } from '@material-ui/core/styles';
 import { Field, FormikProvider, useFormik } from 'formik';
 
@@ -21,6 +23,8 @@ const useStyles = makeStyles((theme) => ({
     marginTop: theme.spacing(2),
   },
   buttonContainer: {
+    display: 'flex',
+    justifyContent: 'space-between',
     marginTop: theme.spacing(2),
     '& :first-child': {
       marginRight: theme.spacing(1),
@@ -28,6 +32,7 @@ const useStyles = makeStyles((theme) => ({
   },
   datePickerContainer: {
     display: 'flex',
+    marginBottom: theme.spacing(2),
     '& > *': {
       marginRight: theme.spacing(10),
       maxWidth: '220px',
@@ -47,14 +52,58 @@ export const detailValidationSchema = yup.object({
     organization: yup
       .string("Enter the name of the maintainer's organization"),
   }),
-  stochastic: yup
-    .string('Is the model stocashtic?')
-    .required('Is your model stochastic?'),
   period: yup.object().shape({
     gte: yup.date().nullable(),
     lte: yup.date().nullable(),
   }),
 });
+
+export const DomainsAutocomplete = ({ formik, label = 'Model Domain(s)', disabled, textFieldProps }) => {
+  const [domainList, setDomainList] = React.useState([]);
+
+  useEffect(() => {
+    if (domainList.length === 0) {
+      axios('/api/dojo/dojo/domains').then((response) => { setDomainList(response.data); });
+    }
+  }, [domainList]);
+
+  return domainList.length > 0
+    ? (
+      <Autocomplete
+        multiple
+        filterSelectedOptions
+        name="domains"
+        value={formik.values.domains || []}
+        options={domainList}
+        onChange={(evt, value) => { if (value) { formik.setFieldValue('domains', value); } }}
+        onBeforeInput={(evt) => {
+          if (evt.nativeEvent?.type === 'keypress' && evt.nativeEvent.keyCode === 13) {
+            evt.preventDefault();
+            evt.stopPropagation();
+          }
+        }}
+        disabled={disabled}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            variant="outlined"
+            label={label}
+            data-test="modelFormDomain"
+            {...textFieldProps}
+            disabled={disabled}
+          />
+        )}
+      />
+    )
+    : (
+      <TextField
+        disabled
+        variant="outlined"
+        value="Fetching domains"
+        fullWidth
+      />
+    );
+};
 
 export const ModelDetailFields = ({
   formik
@@ -101,26 +150,8 @@ export const ModelDetailFields = ({
           />
         </div>
       </MuiPickersUtilsProvider>
-      <Field
-        required
-        name="stochastic"
-        data-test="modelFormStochastic"
-        component={RadioGroup}
-        value={formik.values.stochastic}
-        label="Is this model stochastic?"
-        options={[
-          { value: 'true', label: 'Yes' },
-          { value: 'false', label: 'No' }
-        ]}
-        groupProps={{ row: true }}
-      />
-      <Field
-        name="category"
-        data-test="modelFormCategory"
-        component={ChipInput}
-        value={formik.values.category}
-        label="Category (type a category and press space)"
-      />
+
+      <DomainsAutocomplete formik={formik} />
     </>
   );
 };
@@ -134,6 +165,15 @@ export const ModelDetail = ({
     validationSchema: detailValidationSchema,
     onSubmit: (values) => handleNext(values),
   });
+
+  useEffect(() => {
+    // saving the form state every 1 second is probably sufficient
+    const debounced = setTimeout(() => {
+      localStorage.setItem('modelStep', 1);
+      localStorage.setItem('modelInfo', JSON.stringify(formik.values));
+    }, 1000);
+    return () => clearTimeout(debounced);
+  }, [formik]);
 
   return (
     <FormikProvider value={formik}>
@@ -153,6 +193,7 @@ export const ModelDetail = ({
               data-test="modelFormDetailNextBtn"
               type="submit"
               variant="contained"
+              disableElevation
             >
               Next
             </Button>

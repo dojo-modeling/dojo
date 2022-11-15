@@ -18,7 +18,7 @@ const (
 	TIMEOUT   uint8 = 42
 )
 
-var dir = flag.String("dir", "/home/terminal", "working directory")
+var dir = flag.String("dir", "/home/clouseau", "working directory")
 
 type CommandLine struct {
 	Command string

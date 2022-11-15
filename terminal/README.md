@@ -1,10 +1,10 @@
 
 
-![Terminal](docs/terminal.png)
+![Dojo Terminal](docs/clouseau.png)
 
-![Build](https://github.com/dojo-modeling/terminal/workflows/Build/badge.svg)
+![Build](https://github.com/jataware/clouseau/workflows/Build/badge.svg)
 
-v0.1.0
+v1.0.0
 
 
 ## Demo
@@ -12,7 +12,7 @@ v0.1.0
 https://user-images.githubusercontent.com/969727/115638877-3bd3a700-a2e1-11eb-8f08-d3c9fa5907f0.mp4
 
 ```
-go  v1.16.3
+go  v1.17
 ```
 
 
@@ -33,7 +33,7 @@ echo '{"username":"<username>","password":"<password>","email":"<email>"}' | bas
 ```
 DOCKERHUB_AUTH=<auth token>
 REDIS_HOST=192.168.1.6
-TERMINAL_WORKERS=192.168.1.6:8375,192.168.1.7:2375
+TERMINAL_WORKERS=192.168.1.6,192.168.1.7
 ```
 
 

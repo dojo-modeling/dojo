@@ -7,6 +7,8 @@ redis:
   host: localhost
   port: 6379
 
-
 docker:
   org: jataware
+
+http:
+  static: /home/app/api/static

@@ -4,7 +4,7 @@
 # gnumake curl git
 # docker docker-compose
 
-VERSION := 0.1.0
+VERSION := 1.0.0
 
 DEV ?= $(strip $(if $(findstring y,$(prod)),,dev))
 
@@ -58,7 +58,7 @@ docker_push-dockerhub: docker_push-connector docker_push-api | docker_login-dock
 
 docker_push-%:| docker_login-dockerhub
 	@echo "push $* ${VERSION}"
-	docker push "dojomodeling/terminal:$*_${VERSION}"
+	docker push "jataware/terminal:$*_${VERSION}"
 
 .PHONY: go_fmt-embedded
 go_fmt-embedded:   ## format connector/embedded
@@ -74,8 +74,13 @@ go_fmt-server:
 	(cd connector/server/api && go fmt connector/server/api)
 	(cd connector/server && go fmt connector/server)
 
+.PHONY: go_fmt-cli
+go_fmt-cli:
+	(cd connector/cli && go fmt ./... )
+
+
 .PHONY: go_fmt
-go_fmt:| go_fmt-embedded go_fmt-preexec go_fmt-server   ## format go files
+go_fmt:| go_fmt-embedded go_fmt-preexec go_fmt-server go_fmt-cli  ## format go files
 
 .PHONY: go_build-embedded
 go_build-embedded:  ## Compile connector/embedded
@@ -94,7 +99,7 @@ go_build-preexec: ## Compile connector/preexec
 		 go mod tidy && \
 		 go build -gcflags="-m=2 -l" \
 							-ldflags "-X main.Version=${VERSION} -X main.Build=$(shell date +%FT%T%Z) -X main.Commit=$(shell git rev-parse --short HEAD)" \
-							-o ../build/c main.go)
+							-o ../build/dojo-preexec main.go)
 
 .PHONY: go_build-server
 go_build-server: ## Compile connector/server
@@ -107,7 +112,56 @@ go_build-server: ## Compile connector/server
 							-ldflags "-X main.Version=${VERSION} -X main.Build=$(shell date +%FT%T%Z) -X main.Commit=$(shell git rev-parse --short HEAD)" \
 							-o ../build/api main.go)
 
-GO_BUILDS := go_build-embedded go_build-server go_build-preexec
+.PHONY: go_build-cli
+go_build-cli:  ## Compile connector/cli
+	(cd connector/cli && \
+		 go mod tidy && \
+		 go build -gcflags="-m=2 -l" \
+							-ldflags "-X main.Version=${VERSION} -X main.Build=$(shell date +%FT%T%Z) -X main.Commit=$(shell git rev-parse --short HEAD)" \
+							-o ../build/dojo main.go)
+dist:
+	mkdir -p dist/pkg
+
+dist-clean:
+			 -rm -r dist/*
+
+.PHONY: go_build-linux-preexec
+go_build-linux-preexec:
+	(cd connector/preexec && \
+		 go mod tidy && \
+		 GOOS=linux go build -gcflags="-m=2 -l" \
+							-ldflags "-X main.Version=${VERSION} -X main.Build=$(shell date +%FT%T%Z) -X main.Commit=$(shell git rev-parse --short HEAD)" \
+							-o ../../dist/pkg/dojo-preexec main.go)
+
+
+.PHONY: go_build-linux-embedded
+go_build-linux-embedded:
+	(cd connector/embedded/app && \
+		 go mod tidy && \
+		 GOOS=linux go build connector/embedded/app)
+	(cd connector/embedded && \
+		 go mod tidy && \
+		 GOOS=linux go build \
+							-ldflags "-X main.Version=${VERSION} -X main.Build=$(shell date +%FT%T%Z) -X main.Commit=$(shell git rev-parse --short HEAD)" \
+							-o ../../dist/pkg/connector connector/embedded)
+
+.PHONY: go_build-linux-cli
+go_build-linux-cli:
+	(cd connector/cli && \
+		 go mod tidy && \
+		 GOOS=linux go build \
+							-ldflags "-X main.Version=${VERSION} -X main.Build=$(shell date +%FT%T%Z) -X main.Commit=$(shell git rev-parse --short HEAD)" \
+							-o ../../dist/pkg/dojo main.go)
+
+GO_PKG_BUILDS := go_build-linux-cli go_build-linux-embedded go_build-linux-preexec
+
+.PHONY: docker-package
+docker-package: dist-clean dist  $(GO_PKG_BUILDS) ## Build template package
+	(cp -r connector/pkg/. dist/pkg/ && \
+	 cd dist && \
+	 tar czvf pkg.tgz -C pkg .)
+
+GO_BUILDS := go_build-embedded go_build-server go_build-preexec go_build-cli
 
 .PHONY: go_build
 go_build:| $(GO_BUILDS) ## Build go binaries
@@ -121,7 +175,7 @@ compile:| go_build  ## Compile all builds
 .PHONY: api_run_dev
 api_run_dev: ## Dev - run api dev server locally
 	(cd connector/server && \
-			go run \
+			HTTP_STATIC=../../dist go run \
 				 -ldflags "-X main.Version=${VERSION} -X main.Build=$(shell date +%FT%T%Z) -X main.Commit=$(shell git rev-parse --short HEAD)" \
 				 main.go -settings settings.yaml -debug -trace -env -pull-images=false)
 

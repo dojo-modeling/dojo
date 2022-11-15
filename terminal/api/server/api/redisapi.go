@@ -30,6 +30,66 @@ func (r *RedisStore) Ping() error {
 	return err
 }
 
+func (r *RedisStore) Del(key string) error {
+	_, err := r.rdb.Del(context.Background(), key).Result()
+	return err
+}
+
+func (r *RedisStore) Scan(pattern string) ([]string, error) {
+	xs := make([]string, 0)
+	ctx := context.Background()
+	iter := r.rdb.Scan(ctx, 0, pattern, 0).Iterator()
+	for iter.Next(ctx) {
+		xs = append(xs, iter.Val())
+	}
+
+	if err := iter.Err(); err != nil {
+		return xs, err
+	}
+
+	return xs, nil
+}
+
+func (r *RedisStore) LPush(key string, value string) error {
+	_, err := r.rdb.LPush(context.Background(), key, value).Result()
+	return err
+}
+
+func (r *RedisStore) LRange(key string, start int64, stop int64) ([]string, error) {
+	return r.rdb.LRange(context.Background(), key, start, stop).Result()
+}
+
+func (r *RedisStore) SAdd(key string, value string) error {
+	_, err := r.rdb.SAdd(context.Background(), key, value).Result()
+	return err
+}
+
+func (r *RedisStore) SMembers(key string) ([]string, error) {
+	res, err := r.rdb.SMembers(context.Background(), key).Result()
+	return res, err
+}
+
+func (r *RedisStore) SRem(key string, val string) error {
+	_, err := r.rdb.SRem(context.Background(), key, val).Result()
+	return err
+}
+
+func (r *RedisStore) Get(key string) (string, error) {
+	return r.rdb.Get(context.Background(), key).Result()
+}
+
+func (r *RedisStore) HGetAll(key string) (map[string]string, error) {
+	return r.rdb.HGetAll(context.Background(), key).Result()
+}
+
+func (r *RedisStore) SetNX(key string, val string) (bool, error) {
+	return r.rdb.SetNX(context.Background(), key, val, 0).Result()
+}
+
+func (r *RedisStore) Set(key string, val string) error {
+	return r.rdb.Set(context.Background(), key, val, 0).Err()
+}
+
 func (r *RedisStore) HSet(key string, m map[string]string) error {
 	_, err := r.rdb.HSet(context.Background(), key, m).Result()
 	return err

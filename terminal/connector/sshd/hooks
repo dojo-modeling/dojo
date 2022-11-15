@@ -1,0 +1,18 @@
+
+preexec() {
+  if [ -f /usr/bin/dojo-preexec ]; then
+    export HIST_LAST_CMD="${PWD} ${1}"
+    echo "PRE  $(date +%s.%N) ${HIST_LAST_CMD}" >> /var/log/connector/hist.log
+    return $(/usr/bin/dojo-preexec --dir "${PWD}" "${1}")
+  fi
+}
+
+precmd() {
+  history -a;
+  if [ -f /usr/bin/dojo-preexec ]; then
+    if [ ! -z "${HIST_LAST_CMD}" ]; then
+      echo "POST $(date +%s.%N) ${HIST_LAST_CMD}" >> /var/log/connector/hist.log
+    fi
+    export HIST_LAST_CMD=
+  fi
+}

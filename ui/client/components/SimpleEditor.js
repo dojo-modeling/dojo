@@ -67,7 +67,7 @@ const SimpleEditor = ({ editorContents, setEditorContents }) => {
   const textRef = useRef(null);
   const [textHeight, setTextHeight] = useState(0);
   const [lineNumbers, setLineNumbers] = useState('');
-
+  const inputRef = useRef(null);
   useEffect(() => {
     // do this in a useEffect that just runs on render so it only happens once
     setLineNumbers(displayLineNumbers());
@@ -94,7 +94,7 @@ const SimpleEditor = ({ editorContents, setEditorContents }) => {
 
   return (
     <Container>
-      <Paper className={classes.root} variant="outlined">
+      <Paper className={classes.root} variant="outlined" onClick={() => { inputRef.current.focus(); }}>
         <div
           className={classes.lineNumbers}
           style={{ height: calculateNumbersHeight() }}
@@ -103,12 +103,14 @@ const SimpleEditor = ({ editorContents, setEditorContents }) => {
         </div>
         <Divider orientation="vertical" flexItem className={classes.divider} />
         <TextField
+          id="textField"
           data-test="terminalEditorTextArea"
           multiline
           placeholder=""
           value={editorContents?.text || ''}
           onChange={updateEditorContents}
           className={classes.textareaAutosize}
+          inputRef={inputRef}
           ref={textRef}
           InputProps={{
             disableUnderline: true,
@@ -121,6 +123,7 @@ const SimpleEditor = ({ editorContents, setEditorContents }) => {
             },
           }}
         />
+
       </Paper>
     </Container>
   );

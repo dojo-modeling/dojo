@@ -25,7 +25,9 @@ const isOverflown = (el) => (
   el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth
 );
 
-function ExpandableDataGridCell({ width, value }) {
+const ExpandableDataGridCell = ({
+  width, value, whiteSpace = 'normal'
+}) => {
   const cellValue = useRef(null);
   const cellDiv = useRef(null);
   const wrapper = useRef(null);
@@ -33,7 +35,7 @@ function ExpandableDataGridCell({ width, value }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const [showFullCell, setShowFullCell] = useState(false);
 
-  const classes = useStyles();
+  const classes = useStyles({ whiteSpace });
 
   const handleMouseEnter = () => {
     const isCurrentlyOverflown = isOverflown(cellValue.current);
@@ -76,7 +78,7 @@ function ExpandableDataGridCell({ width, value }) {
             elevation={1}
             style={{ minHeight: wrapper.current.offsetHeight - 3 }}
           >
-            <Typography variant="body2" style={{ padding: 8 }}>
+            <Typography variant="body2" style={{ padding: 8, whiteSpace }}>
               {value}
             </Typography>
           </Paper>
@@ -84,6 +86,6 @@ function ExpandableDataGridCell({ width, value }) {
       )}
     </div>
   );
-}
+};
 
 export default ExpandableDataGridCell;

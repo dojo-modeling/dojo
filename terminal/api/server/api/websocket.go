@@ -1,12 +1,13 @@
 package api
 
 import (
-	"fmt"
-	"github.com/gin-gonic/gin"
+	//"fmt"
+	//"github.com/gin-gonic/gin"
 	ws "github.com/gorilla/websocket"
+	//"github.com/rs/xid"
 	"log"
 	"net/http"
-	"strconv"
+	//"strconv"
 	"time"
 )
 
@@ -26,11 +27,6 @@ type WebSocketMessage struct {
 	Payload string `json:"payload"`
 }
 
-type DirectMessage struct {
-	Message WebSocketMessage `json:"message"`
-	Clients []string         `json:"clients"`
-}
-
 var webSocketUpgrader = ws.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -47,33 +43,4 @@ func WebSocketUpgrade(w http.ResponseWriter, r *http.Request) (*ws.Conn, error) 
 	}
 
 	return conn, nil
-}
-
-func ServeWebSocket(settings *Settings, pool *WebSocketPool, terminalWorkerPool *TerminalWorkerPool, redisStore *RedisStore) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		idx := c.Param("idx")
-		i, err := strconv.Atoi(idx)
-
-		if err != nil {
-			c.String(http.StatusInternalServerError, fmt.Sprintf("%+v", err))
-			return
-		}
-		dockerServer := terminalWorkerPool.Workers[i].Docker.Host
-
-		log.Printf("WebSocket Upgrade\n")
-		conn, err := WebSocketUpgrade(c.Writer, c.Request)
-		if err != nil {
-			fmt.Fprintf(c.Writer, "%+v\n", err)
-			return
-		}
-
-		client := NewWebSocketClient(conn, pool, dockerServer, settings, redisStore)
-
-		pool.Register <- client
-		pool.Direct <- DirectMessage{
-			Clients: []string{client.ID},
-			Message: WebSocketMessage{Channel: "id", Payload: client.ID}}
-		go client.KeepAlive()
-		go client.Read()
-	}
 }

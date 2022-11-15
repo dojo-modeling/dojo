@@ -165,12 +165,12 @@ const Intro = () => {
   useEffect(() => {
     // define this inside here so useEffect knows it is stable
     const refreshNodeInfo = async () => {
-      const resp = await fetch('/api/terminal/docker/nodes');
+      const resp = await fetch('/api/clouseau/docker/nodes');
       const nodes = await resp.json();
 
       const nodeContainers = await Promise.all(nodes.map(async (n, i) => {
         try {
-          const r = await Promise.race([fetch(`/api/terminal/docker/${n.i}/containers`),
+          const r = await Promise.race([fetch(`/api/clouseau/docker/${n.i}/containers`),
             fetchTimeout()]);
 
           if (!r.ok) {

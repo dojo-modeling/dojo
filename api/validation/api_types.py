@@ -50,6 +50,11 @@ def check_json_number(value):
     return Draft7Validator({"type": "number"}).is_valid(value)
 
 
+"""
+Classes corresponding to types from the specification in
+https://gitlab-ext.galois.com/world-modelers/galois-internal/model-types-spec
+"""
+
 T = TypeVar("T")
 
 

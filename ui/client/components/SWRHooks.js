@@ -24,27 +24,18 @@ export function useModel(modelId) {
   };
 }
 
-export function useContainer(containerId) {
+// Datasets were previously called indicators, and this has not yet been updated in dojo
+export function useDataset(datasetId) {
   const { data, error, mutate } = useSWR(
-    containerId ? `/api/dojo/terminal/container/${containerId}` : null, fetcher
+    datasetId ? `/api/dojo/indicators/${datasetId}` : null, fetcher
   );
 
   return {
-    container: data,
-    mutateContainer: mutate,
-    containerLoading: !error && !data,
-    containerError: error,
+    dataset: data,
+    datasetLoading: !error && !data,
+    datasetError: error,
+    mutateDataset: mutate,
   };
-}
-
-export function useContainerWithWorker(workerNode) {
-  // fetch the container ID first
-  const { data: containerId } = useSWR(
-    workerNode ? `/api/terminal/container/${workerNode}/ops/container` : null, fetcher
-  );
-
-  // then fetch the container (SWR handles this nicely)
-  return useContainer(containerId?.id);
 }
 
 export function useConfigs(modelId) {
@@ -99,9 +90,9 @@ export function useDirective(modelId) {
   };
 }
 
-export function useShellHistory(containerId) {
+export function useShellHistory(modelId) {
   const { data, error, mutate } = useSWR(
-    containerId ? `/api/dojo/terminal/container/${containerId}/history` : null, fetcher
+    modelId ? `/api/dojo/terminal/container/history/${modelId}` : null, fetcher
   );
 
   return {
@@ -122,5 +113,85 @@ export function useRunLogs(runId) {
     runLogsLoading: !error && !data,
     runLogsError: error,
     mutateRunLogs: mutate,
+  };
+}
+
+export function useRun(runId) {
+  const {
+    data, error, mutate
+  } = useSWR(
+    runId ? `/api/dojo/runs/${runId}` : null, fetcher
+  );
+
+  return {
+    run: data,
+    runLoading: !data && !error,
+    runError: error,
+    mutateRun: mutate
+  };
+}
+
+export function useLocks() {
+  const { data, error, mutate } = useSWR('/api/terminal/docker/locks', fetcher);
+
+  // we only use the locks property inside the object here
+  return {
+    locks: data?.locks,
+    locksLoading: !error && !data,
+    locksError: error,
+    mutateLocks: mutate,
+  };
+}
+
+export function useLock(modelId) {
+  const lockFetcher = async (url) => {
+    const response = await fetch(url);
+    const parsedResponse = await response.json();
+
+    if (!response.ok) {
+      const error = new Error(`Error fetching data from ${url}`);
+      error.info = parsedResponse;
+      error.status = response.status;
+      throw error;
+    }
+
+    if (parsedResponse.containerId === 'unset' || !parsedResponse.containerId.length) {
+      const error = new Error(`No container lock found for model ${modelId}`);
+      throw error;
+    }
+
+    return parsedResponse;
+  };
+
+  // use this custom fetcher because we also want to throw an error when containerId is 'unset'
+  const { data, error } = useSWR(
+    `/api/terminal/docker/locks/${modelId}`, lockFetcher
+  );
+
+  return {
+    lock: data,
+    lockLoading: !error && !data,
+    lockError: error,
+  };
+}
+
+export function useNodes() {
+  const { data, error, mutate } = useSWR('/api/terminal/docker/nodes?v', fetcher);
+
+  return {
+    nodes: data,
+    nodesLoading: !error && !data,
+    nodesError: error,
+    mutateNodes: mutate,
+  };
+}
+
+export function useParams(modelId) {
+  const { data, error } = useSWR(`/api/dojo/dojo/parameters/${modelId}`, fetcher);
+
+  return {
+    params: data,
+    paramsLoading: !error && !data,
+    paramsError: error,
   };
 }

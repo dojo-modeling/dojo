@@ -1,6 +1,9 @@
 # Generated files
 /docker-compose.yaml
 
+# Logs
+**/logs/*
+
 # Data directories
 data/*
 final/*
@@ -148,9 +151,6 @@ envfile
 .dmypy.json
 dmypy.json
 
-# Log dirs
-logs/
-
 # Pyre type checker
 .pyre/
 
@@ -159,3 +159,6 @@ logs/
 
 # Cython debug symbols
 cython_debug/
+
+**/es-mappings/import/*.json
+**/tasks/venv_tasks/

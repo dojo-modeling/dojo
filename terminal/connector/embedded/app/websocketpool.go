@@ -1,9 +1,10 @@
 package app
 
 import (
-	ws "github.com/gorilla/websocket"
 	"log"
 	"time"
+
+	ws "github.com/gorilla/websocket"
 )
 
 type WebSocketPool struct {
@@ -45,7 +46,10 @@ func (pool *WebSocketPool) Start() {
 			log.Printf("Sending message to all clients in Pool\n")
 			for client, _ := range pool.Clients {
 				client.Conn.SetWriteDeadline(time.Now().Add(writeWait))
-				if err := client.Conn.WriteJSON(message); err != nil {
+				client.mu.Lock()
+				err := client.Conn.WriteJSON(message)
+				client.mu.Unlock()
+				if err != nil {
 					if ws.IsUnexpectedCloseError(err, ws.CloseGoingAway, ws.CloseAbnormalClosure) {
 						log.Printf("Broadcast Error: %+v\n", err)
 					}

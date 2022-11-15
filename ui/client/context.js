@@ -4,9 +4,10 @@ import React, {
   useContext,
   useEffect,
   useRef,
+  useState,
 } from 'react';
 
-import { sleep } from './utils';
+import LoadingOverlay from './components/LoadingOverlay';
 
 export const WebSocketContext = createContext({});
 export const WebSocketUpdateContext = createContext({});
@@ -14,14 +15,33 @@ export const useWebSocketContext = () => useContext(WebSocketContext);
 export const useWebSocketUpdateContext = () => useContext(WebSocketUpdateContext);
 
 export const WebSocketContextProvider = ({ url, children }) => {
-  const ws = useRef(new WebSocket(url));
-  const Q = useRef({});
+  const websocket = useRef(null);
+  const listeners = useRef({});
   const clientId = useRef(null);
 
+  const isWebsocketLoaded = () => {
+    // if we have no websocket at all, return false
+    if (!websocket || !websocket.current) return false;
+    // otherwise only return true if our readyState equals the OPEN value
+    return websocket.current?.readyState === websocket.current?.OPEN;
+  };
+
+  // use this state to keep track of when to render a websocket wrapped component
+  const [websocketLoaded, setWebsocketLoaded] = useState(isWebsocketLoaded());
+
+  useEffect(() => {
+    // only set up a new Websocket if we don't currently have one
+    if (!websocket.current) {
+      websocket.current = new WebSocket(url);
+    }
+  }, [url]);
+
   const dispatch = (channel, payload) => {
-    const { [channel]: xs = [] } = Q.current;
-    xs.forEach((d) => {
-      d.call(undefined, payload);
+    // grab the current channel's handlers out of the listeners ref, defaulting to []
+    const channelHandlers = listeners.current[channel] ?? [];
+
+    channelHandlers.forEach((handler) => {
+      handler.call(undefined, payload);
     });
   };
 
@@ -33,23 +53,26 @@ export const WebSocketContextProvider = ({ url, children }) => {
   const getWebSocketId = () => clientId.current;
 
   const emit = useCallback(async (channel, payload) => {
-    while (ws.current.readyState === ws.current.CONNECTING) {
-      await sleep(50); // eslint-disable-line no-await-in-loop
-    }
-    ws.current.send(JSON.stringify({ channel, payload }));
+    websocket.current.send(JSON.stringify({ channel, payload }));
   }, []);
 
   const unregister = useCallback((channel, handler) => {
-    // eslint-disable-next-line eqeqeq
-    Q.current[channel] = (Q.current[channel] ?? []).filter((h) => h != handler);
-    if (!Q.current[channel].length) {
-      delete Q.current[channel];
+    // remove everything that doesn't match the current handler from listeners for this channel
+    // because we're just deleting this specific handler for this channel
+    listeners.current[channel] = (listeners.current[channel] ?? [])
+      .filter((currentHandler) => currentHandler !== handler);
+    // if there are no handlers attached to this channel after the above, delete the channel
+    if (!listeners.current[channel].length) {
+      delete listeners.current[channel];
     }
   }, []);
 
   const register = useCallback((channel, handler) => {
+    // call unregister in case we previously had this channel/handler combo registered
     unregister(channel, handler);
-    Q.current[channel] = [...Q.current[channel] ?? [], handler];
+    // set up our listeners ref at this channel to be connected to our handler
+    listeners.current[channel] = [...listeners.current[channel] ?? [], handler];
+    // return unregister - I'm not sure this is being used anywhere - AG
     return () => unregister(channel, handler);
   }, [unregister]);
 
@@ -83,7 +106,7 @@ export const WebSocketContextProvider = ({ url, children }) => {
 
   const closeSocket = () => {
     try {
-      ws.current.close();
+      websocket.current.close();
     } finally {
       console.debug('Websocket Close called');
     }
@@ -91,18 +114,18 @@ export const WebSocketContextProvider = ({ url, children }) => {
 
   useEffect(() => {
     console.info('websocket connecting...');
-    // ws.current = new WebSocket(url);
-    ws.current.onopen = () => {
-      console.info('ws opened');
+    // websocket.current = new WebSocket(url);
+    websocket.current.onopen = () => {
+      console.info('websocket opened');
     };
-    ws.current.onerror = (evt) => {
-      console.debug(`ws error ${evt}`);
+    websocket.current.onerror = (evt) => {
+      console.debug(`websocket error ${evt}`);
     };
-    ws.current.onclose = () => {
-      console.info('ws closed');
+    websocket.current.onclose = () => {
+      console.info('websocket closed');
     };
 
-    ws.current.onmessage = (evt) => {
+    websocket.current.onmessage = (evt) => {
       console.debug(evt.data);
       const data = JSON.parse(evt.data);
 
@@ -112,6 +135,7 @@ export const WebSocketContextProvider = ({ url, children }) => {
 
       if (data.channel === 'id') {
         setWebSocketId(data.payload);
+        setWebsocketLoaded(isWebsocketLoaded());
         return;
       }
 
@@ -123,6 +147,11 @@ export const WebSocketContextProvider = ({ url, children }) => {
       closeSocket();
     };
   }, []);
+
+  // if we haven't hit readyState === OPEN, don't render the wrapped component
+  if (!websocketLoaded) {
+    return <LoadingOverlay text="Loading..." />;
+  }
 
   return (
     <WebSocketContext.Provider value={{ emit, awaitEmit }}>

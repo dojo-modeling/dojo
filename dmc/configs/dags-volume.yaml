@@ -1,0 +1,29 @@
+###################################
+# Airflow - DAGS Volume
+###################################
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: dags-volume
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteMany
+  hostPath:
+    path: "/Users/brandonrose/repos/WM/dojo/dmc/dags"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dags-volume-claim
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi

@@ -4,10 +4,8 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/xid"
-	"io/ioutil"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 )
 
@@ -25,7 +23,7 @@ func catHandler() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		b, err := ioutil.ReadFile(path)
+		b, err := os.ReadFile(path)
 		if err != nil {
 			c.String(http.StatusInternalServerError, fmt.Sprintf("%+v", err))
 			return
@@ -65,57 +63,12 @@ func saveHandler() gin.HandlerFunc {
 	}
 }
 
-func clearHandler(historyServer *HistorySocketServer) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		code := c.Query("code")
-		if code == "" {
-			c.String(http.StatusNotFound, "Not Found")
-			return
-		}
-
-		i, err := strconv.ParseUint(code, 10, 8)
-		if err != nil {
-			c.String(http.StatusInternalServerError, fmt.Sprintf("%+v", err))
-			return
-		}
-
-		historyServer.ClearBlock(uint8(i))
-		c.String(http.StatusOK, "ok")
-	}
-}
-
-func rulesGetHandler(settings *Settings) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.JSON(http.StatusOK, settings.GetRules())
-	}
-}
-
-func rulesPostHandler(settings *Settings) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		rules := Rules{}
-		if err := c.ShouldBindJSON(&rules); err != nil {
-			c.String(http.StatusBadRequest, fmt.Sprintf("%+v", err))
-			return
-		}
-		settings.MergeRules(&rules)
-		c.JSON(http.StatusOK, settings.GetRules())
-	}
-}
-
-func rulesDeleteHandler(settings *Settings) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		rules := Rules{}
-		if err := c.ShouldBindJSON(&rules); err != nil {
-			c.String(http.StatusBadRequest, fmt.Sprintf("%+v", err))
-			return
-		}
-		settings.RemoveRules(&rules)
-		c.JSON(http.StatusOK, settings.GetRules())
-	}
-}
-
 func containerID() (string, error) {
-	data, err := ioutil.ReadFile("/proc/1/cpuset")
+	if *DEV_MODE {
+		return "dev-dummy-id", nil
+	}
+
+	data, err := os.ReadFile("/proc/1/cpuset")
 	if err != nil {
 		return "", err
 	}
@@ -170,20 +123,15 @@ func showBuild() gin.HandlerFunc {
 	}
 }
 
-func SetupRoutes(pool *WebSocketPool, settings *Settings, historyServer *HistorySocketServer) *gin.Engine {
+func SetupRoutes(pool *WebSocketPool) *gin.Engine {
 
 	router := gin.Default()
 
 	router.GET("/", root())
 	router.GET("/websocket", serveWebSocket(pool))
 	router.GET("/cat", catHandler())
-	router.GET("/clear", clearHandler(historyServer))
 	router.POST("/save", saveHandler())
 	router.GET("/container", containerHandler())
-
-	router.GET("/rules", rulesGetHandler(settings))
-	router.POST("/rules", rulesPostHandler(settings))
-	router.DELETE("/rules", rulesDeleteHandler(settings))
 
 	adminGroup := router.Group("/admin")
 	{

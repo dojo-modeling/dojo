@@ -2,11 +2,11 @@
 
 DT=$(date +"%Y%m%d")
 GIT=${DT}.git.$(git rev-parse --short HEAD)
-VERSION="0.1.0"
-TAG="${VERSION}"
+VERSION="1.0.0"
+TAG="api_${VERSION}"
 
-GROUP=dojomodeling
-NAME=api
+GROUP=jataware
+NAME=dojo
 IMAGE="${GROUP}/${NAME}"
 
 docker build -f Dockerfile \
@@ -14,5 +14,4 @@ docker build -f Dockerfile \
        -t "${IMAGE}:${TAG}" \
        -t "${IMAGE}:${TAG}-dev" \
        -t "${IMAGE}:${GIT}" \
-       -t "${IMAGE}:latest" \
        .

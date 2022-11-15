@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import AddCircleOutlineIcon from '@material-ui/icons/AddCircleOutline';
 import Card from '@material-ui/core/Card';
+import ClearIcon from '@material-ui/icons/Clear';
 import IconButton from '@material-ui/core/IconButton';
 import KeyboardArrowDown from '@material-ui/icons/KeyboardArrowDown';
 import KeyboardArrowRight from '@material-ui/icons/KeyboardArrowRight';
@@ -16,8 +17,8 @@ const useStyles = makeStyles((theme) => ({
     backgroundColor: theme.palette.grey[300],
     color: theme.palette.text.secondary,
     marginBottom: theme.spacing(1),
-    padding: [[theme.spacing(1), theme.spacing(2), '10px']],
     whiteSpace: 'nowrap',
+    padding: [[theme.spacing(1), theme.spacing(2), theme.spacing(1)]],
   },
   mainWrapper: {
     display: 'flex',
@@ -43,12 +44,40 @@ const useStyles = makeStyles((theme) => ({
     // https://css-tricks.com/flexbox-truncated-text/
     minWidth: 0,
   },
+  contentMessage: {
+    color: 'inherit',
+    marginTop: theme.spacing(2),
+  },
 }));
 
 // this is broken out into its own component so it can toggle its own open/closed state
 function FileParams({ params, name }) {
   const classes = useStyles();
   const [showParams, setShowParams] = useState(false);
+
+  const displayParameter = (param, i) => {
+    // configs are nested under annotations, outputs are at the top level in the object
+    const selector = name === 'Config' ? param.annotation : param;
+    return (
+      // eslint-disable-next-line react/no-array-index-key
+      <div key={i} className={classes.contentContainer}>
+        <Tooltip title={selector.description} arrow>
+          <Typography variant="caption" noWrap>{selector.name}</Typography>
+        </Tooltip>
+      </div>
+    );
+  };
+
+  if (!params?.length) {
+    return (
+      <>
+        <IconButton disabled size="small">
+          <ClearIcon size="small" />
+        </IconButton>
+        <Typography variant="caption">No Parameters</Typography>
+      </>
+    );
+  }
 
   return (
     <div>
@@ -58,22 +87,16 @@ function FileParams({ params, name }) {
       <Typography variant="caption">
         {showParams ? 'Hide' : 'Show'} {name === 'Config' ? 'Parameters' : 'Output Variables'}
       </Typography>
-      {showParams && params.map((param) => (
-        <div key={param.id} className={classes.contentContainer}>
-          <Tooltip title={param.description} arrow>
-            <Typography variant="caption" noWrap>{param.display_name}</Typography>
-          </Tooltip>
-        </div>
-      ))}
+      {showParams && params.map(displayParameter)}
     </div>
   );
 }
 
 export default function FileCardList({
   name, files, loading, error, primaryClickHandler, primaryIcon, cardContent, disableClick,
-  secondaryClickHandler, secondaryIcon, parameters
+  secondaryClickHandler, secondaryIcon, outputs, hideExpandHeader
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(false || hideExpandHeader);
   const classes = useStyles();
 
   useEffect(() => {
@@ -82,24 +105,23 @@ export default function FileCardList({
     }
   }, [loading, error, files]);
 
-  const getMatchingConfig = (file) => (
-    // match up the config based on the file path
-    parameters.filter((param) => param.template.path === file.path)
-  );
-
   const getMatchingOutput = (file) => (
     // match up the output file based on the output file uuid
-    parameters.filter((param) => param.uuid === file.id)
+    outputs?.filter((param) => param.uuid === file.id)
   );
 
   const displayCards = () => {
     if (loading) {
-      return <Typography variant="body2" align="center">{`Loading ${name} Files...`}</Typography>;
+      return (
+        <Typography variant="subtitle1" align="center" className={classes.contentMessage}>
+          {`Loading ${name} Files...`}
+        </Typography>
+      );
     }
 
     if (error) {
       return (
-        <Typography variant="body2" align="center">
+        <Typography variant="subtitle1" align="center" className={classes.contentMessage}>
           {`There was an error loading ${name.toLowerCase()} files`}
         </Typography>
       );
@@ -107,7 +129,7 @@ export default function FileCardList({
 
     if (!files.length) {
       return (
-        <Typography variant="body2" align="center">
+        <Typography variant="subtitle1" align="center" className={classes.contentMessage}>
           {`No ${name.toLowerCase()} files found`}
         </Typography>
       );
@@ -120,8 +142,9 @@ export default function FileCardList({
         >
           {files.map((file) => (
             <Card
-              key={file.id}
+              key={file.id || file.path}
               className={classes.card}
+              data-test="fileCard"
             >
               <div className={classes.mainWrapper}>
                 <div className={classes.contentContainer}>
@@ -146,12 +169,11 @@ export default function FileCardList({
                   )}
                 </span>
               </div>
-
-              {parameters && (
+              {(name === 'Config' || name === 'Output') && (
                 <FileParams
                   file={file}
                   name={name}
-                  params={name === 'Config' ? getMatchingConfig(file) : getMatchingOutput(file)}
+                  params={name === 'Config' ? file.parameters : getMatchingOutput(file)}
                 />
               )}
             </Card>
@@ -164,17 +186,21 @@ export default function FileCardList({
   return (
     <>
       <span className={classes.headerContainer}>
-        <Typography
-          align="center"
-          color="textSecondary"
-          variant="h6"
-          gutterBottom
-        >
-          {`${name} Files`}
-        </Typography>
-        <IconButton onClick={() => setExpanded((prevExpanded) => !prevExpanded)}>
-          { expanded ? <RemoveCircleOutlineIcon /> : <AddCircleOutlineIcon />}
-        </IconButton>
+        {!hideExpandHeader && (
+          <>
+            <Typography
+              align="center"
+              color="textSecondary"
+              variant="h6"
+              gutterBottom
+            >
+              {`${name} Files`}
+            </Typography>
+            <IconButton onClick={() => setExpanded((prevExpanded) => !prevExpanded)}>
+              { expanded ? <RemoveCircleOutlineIcon /> : <AddCircleOutlineIcon />}
+            </IconButton>
+          </>
+        )}
       </span>
       {displayCards()}
     </>

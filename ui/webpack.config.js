@@ -15,7 +15,7 @@ module.exports = {
     entry: ['babel-polyfill', path.resolve(__dirname, './client/index.js')],
     output: {
         path: path.resolve(__dirname, './dist'),
-        filename: 'bundle.js',
+        filename: '[contenthash].bundle.js',
         publicPath: '/'
     },
     module: {
@@ -51,6 +51,9 @@ module.exports = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept'
     },
+    watchOptions: {
+      ignored: /node_modules/,
+    },
     proxy: {
       '/api/terminal': {
         target: 'http://localhost:3000',
@@ -71,18 +74,6 @@ module.exports = {
         secure: false,
         changeOrigin: true,
       },
-      '/api/templater': {
-        target: 'http://localhost:5000',
-        pathRewrite: { '^/api/templater': '' },
-        secure: false,
-        changeOrigin: true,
-      },
-      '/api/annotate': {
-        target: 'http://localhost:8001',
-        pathRewrite: { '^/api/annotate': '' },
-        secure: false,
-        changeOrigin: true,
-      },
     }
   },
     plugins: [
@@ -93,7 +84,7 @@ module.exports = {
             favicon: 'client/favicon.ico',
         }),
         new MiniCssExtractPlugin({
-            filename: "[name].css",}),
+            filename: "[contenthash].css",}),
       new webpack.HotModuleReplacementPlugin(),
       new CopyWebpackPlugin({
         patterns: [

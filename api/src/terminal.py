@@ -2,7 +2,7 @@ import asyncio
 import logging
 from logging import Logger
 from operator import attrgetter
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, List, Optional
 from uuid import uuid4
 
 import aioredis
@@ -29,21 +29,10 @@ class FileRequestItem(BaseModel):
     request_path: str
 
 
-class ProvisionItem(BaseModel):
-    idx: Optional[int]
-    cmd: List[str]
-
-
 class HistoryItem(BaseModel):
     idx: Optional[int]
     command: str
     cwd: str
-
-
-class EditItem(BaseModel):
-    idx: Optional[int]
-    file: str
-    text: str
 
 
 class ContainerInfo(BaseModel):
@@ -53,11 +42,6 @@ class ContainerInfo(BaseModel):
     image: str
     launched: str
     docker_host: str
-    run_command: Optional[str]
-    run_cwd: Optional[str]
-    provisions: List[List[str]]
-    history: List[HistoryItem]
-    edits: List[EditItem]
 
 
 @router.get("/ping")
@@ -86,10 +70,9 @@ async def gather_list(redis: aioredis.Redis, prefix: str, fetcher: Callable[[str
     return await gather_non_nil([fetcher(prefix, i) for i in range(count)])
 
 
-@router.get("/container/{cid}/history")
-async def container_history(cid: str, redis: aioredis.Redis = Depends(redis_pool)) -> List[HistoryItem]:
-    key = f"closeau:container:{cid}"
-    history_prefix = f"{key}:history"
+@router.get("/container/history/{model_id}")
+async def container_history(model_id: str, redis: aioredis.Redis = Depends(redis_pool)) -> List[HistoryItem]:
+    key = f"terminal:history:{model_id}"
 
     async def fetcher(prefix: str, i: int) -> Optional[HistoryItem]:
         hist = await redis.hmget(f"{prefix}:{i}", "command", "cwd")
@@ -98,55 +81,24 @@ async def container_history(cid: str, redis: aioredis.Redis = Depends(redis_pool
             return HistoryItem(idx=i, command=command, cwd=cwd)
         return None
 
-    res = await gather_list(redis, history_prefix, fetcher)
+    res = await gather_list(redis, key, fetcher)
     return sorted(res, key=attrgetter("idx"))
 
 
-@router.delete("/container/{cid}/{prefix}/{idx}")
-async def delete_list_item(cid: str, prefix: str, idx: str, redis: aioredis.Redis = Depends(redis_pool)) -> str:
-    key = f"closeau:container:{cid}"
-    item_key = f"{key}:{prefix}:{idx}"
+@router.delete("/container/history/{model_id}/{idx}")
+async def delete_list_item(model_id: str, idx: str, redis: aioredis.Redis = Depends(redis_pool)) -> str:
+    key = f"terminal:history:{model_id}"
+    item_key = f"{key}:{idx}"
     await redis.delete(item_key)
     return "ok"
 
 
-@router.get("/container/{cid}/edits")
-async def container_edits(cid: str, redis: aioredis.Redis = Depends(redis_pool)) -> List[EditItem]:
-    key = f"closeau:container:{cid}"
-    edits_prefix = f"{key}:edits"
-
-    async def fetcher(prefix: str, i: int) -> Optional[EditItem]:
-        edit = await redis.hmget(f"{prefix}:{i}", "file", "text")
-        if edit:
-            f, t = edit
-            return EditItem(idx=i, file=f, text=t)
-        return None
-
-    res = await gather_list(redis, edits_prefix, fetcher)
-    return sorted(res, key=attrgetter("idx"))
-
-
-@router.get("/container/{cid}/provisions")
-async def container_provisions(cid: str, redis: aioredis.Redis = Depends(redis_pool)) -> List[List[str]]:
-    key = f"closeau:container:{cid}"
-    provisions_prefix = f"{key}:provisions"
-
-    async def fetcher(prefix: str, i: int) -> Optional[ProvisionItem]:
-        provision = await redis.lrange(f"{provisions_prefix}:{i}", 0, -1)
-        if provision:
-            return ProvisionItem(idx=i, cmd=provision)
-        return None
-
-    res = await gather_list(redis, provisions_prefix, fetcher)
-    return [p.cmd for p in sorted(res, key=attrgetter("idx"))]
-
-
-@router.get("/container/{cid}")
+@router.get("/container/info/{cid}")
 async def container_info(cid: str, redis: aioredis.Redis = Depends(redis_pool)) -> ContainerInfo:
     """
     Rebuild an object from redis
     """
-    key = f"closeau:container:{cid}"
+    key = f"terminal:container:{cid}"
     fields = [
         "id",
         "name",
@@ -154,46 +106,25 @@ async def container_info(cid: str, redis: aioredis.Redis = Depends(redis_pool)) 
         "image",
         "launched",
         "docker_host",
-        "run_command",
-        "run_cwd",
     ]
     # meta
-    cid, name, model_id, image, launched, docker_host, run_command, run_cwd = await redis.hmget(key, *fields)
-    edits = await container_edits(cid, redis)
-    provisions = await container_provisions(cid, redis)
-    history = await container_history(cid, redis)
+    cid, name, model_id, image, launched, docker_host = await redis.hmget(key, *fields)
     return ContainerInfo(
-        id=cid,
+        id=model_id,
         name=name,
         model_id=model_id,
         image=image,
         launched=launched,
         docker_host=docker_host,
-        run_command=run_command,
-        run_cwd=run_cwd,
-        edits=edits,
-        provisions=provisions,
-        history=history,
     )
 
 
-@router.get("/container/{cid}/runcommand")
-async def container_runcommand(cid: str, redis: aioredis.Redis = Depends(redis_pool)) -> Dict[str, str]:
-    key = f"closeau:container:{cid}"
-    fields = ["run_command", "run_cwd"]
-
-    run_command, run_cwd = await redis.hmget(key, *fields)
-    if not run_command:
-        return {}
-    return {"command": run_command, "cwd": run_cwd}
-
-
-@router.delete("/container/{cid}")
+@router.delete("/container/info/{cid}")
 async def expire_container_info(cid: str, redis: aioredis.Redis = Depends(redis_pool)) -> int:
     """
     Expire all keys related to an ID
     """
-    key = f"closeau:container:{cid}"
+    key = f"terminal:container:{cid}"
     cur = 0
     count = 0
     while res := await redis.scan(cur, f"{key}*", 100):
@@ -211,7 +142,7 @@ async def expire_container_info(cid: str, redis: aioredis.Redis = Depends(redis_
 async def put_request_info(item: FileRequestItem, redis: aioredis.Redis = Depends(redis_pool)) -> ResponseId:
     TTL = 1800  # seconds
     reqid = str(uuid4().hex)
-    key = f"closeau:file:{reqid}"
+    key = f"terminal:file:{reqid}"
 
     await redis.hmset_dict(key, item.dict())
     await redis.expire(key, TTL)
@@ -221,7 +152,7 @@ async def put_request_info(item: FileRequestItem, redis: aioredis.Redis = Depend
 
 @router.get("/file/{reqid}")
 async def get_file_request_info(reqid: str, redis: aioredis.Redis = Depends(redis_pool)) -> FileRequestItem:
-    key = f"closeau:file:{reqid}"
+    key = f"terminal:file:{reqid}"
     fields = ["model_id", "file_path", "request_path"]
     model_id, file_path, request_path = await redis.hmget(key, *fields)
     try:

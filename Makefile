@@ -4,15 +4,27 @@ PYTHON = $(shell which python3 || which python)
 export LANG
 
 BASEDIR = $(shell pwd)
-COMPOSE_FILES := annotate/docker-compose.dev.yaml api/docker-compose.yaml build/workers/docker-compose.yaml \
-		templater/docker-compose.yaml terminal/docker-compose.yaml #  ui/docker-compose.yaml
+TERMINAL_DIR = terminal
+DOJO_API_DIR = api
+DOJO_DMC_DIR = dmc
+MIXMASTA_DIR = mixmasta
+UI_DIR = ui
+RQ_DIR = tasks
+WORKERS_DIR = build/workers
+COMPOSE_DIRS := $(TERMINAL_DIR) $(DOJO_API_DIR) $(DOJO_DMC_DIR) $(WORKERS_DIR)
+COMPOSE_FILES := $(TERMINAL_DIR)/docker-compose.yaml $(DOJO_API_DIR)/docker-compose.yaml \
+				 $(DOJO_DMC_DIR)/docker-compose.yaml $(WORKERS_DIR)/docker-compose.yaml \
+				 $(RQ_DIR)/docker-compose.yaml
 TEMP_COMPOSE_FILES := $(foreach file,$(subst /,_,$(COMPOSE_FILES)),temp_$(file))
+IMAGE_NAMES = api terminal ui tasks
+BUILD_FILES = $(wildcard */.build)
+BUILD_DIRS = $(dir $(BUILD_FILES))
 
 
 .PHONY:update
 update:
 	git pull && \
-	$(PYTHON) $(BASEDIR)/build/bin/update_envfile.py envfile.sample envfile;
+	$(PYTHON) $(BASEDIR)/bin/update_envfile.py envfile.sample envfile;
 
 .PHONY:init
 init:
@@ -29,6 +41,15 @@ ifeq ($(wildcard envfile),)  # If file "envfile" doesn't exist
 	echo -e "\nDon't forget to update 'envfile' with all your secrets!";
 endif
 
+.PHONY:static
+static:docker-compose.yaml ui/node_modules ui/package-lock.json ui/package.json
+	( cd ui && rm -fr dist/; NODE_OPTIONS="--openssl-legacy-provider" npm run build)
+
+.PHONY:images
+images:static
+	for dir in $(BUILD_DIRS); do \
+		(cd $${dir} && bash .build); \
+	done
 
 .PHONY:clean
 clean:
@@ -38,9 +59,11 @@ clean:
 	docker-compose run app rm -r ./data/*/ && \
 	echo "Done"
 
+terminal/.dockerenv:
+	touch terminal/.dockerenv
 
-docker-compose.yaml:$(COMPOSE_FILES) docker-compose.build-override.yaml envfile
-	export $$(cat envfile | xargs); \
+docker-compose.yaml:$(COMPOSE_FILES) docker-compose.build-override.yaml terminal/.dockerenv envfile
+	export $$(grep -v '^#' envfile | xargs); \
 	export AWS_SECRET_ACCESS_KEY_ENCODED=$$(echo -n $${AWS_SECRET_ACCESS_KEY} | \
 		curl -Gso /dev/null -w %{url_effective} --data-urlencode @- "" | cut -c 3-); \
 	if [[ -z  "$${DOCKERHUB_AUTH}" ]]; then \
@@ -50,20 +73,25 @@ docker-compose.yaml:$(COMPOSE_FILES) docker-compose.build-override.yaml envfile
 	  	tempfile="temp_$${compose_file//\//_}"; \
   		docker-compose -f $$compose_file config > $$tempfile; \
   	done; \
+	sed -E -i'.sedbkp' -f .dmc.sed temp_dmc_docker-compose.yaml; \
 	docker-compose --env-file envfile $(foreach f,$(TEMP_COMPOSE_FILES), -f $(f)) \
 	  	-f docker-compose.build-override.yaml config > docker-compose.yaml; \
-	rm $(TEMP_COMPOSE_FILES);
+	rm $(TEMP_COMPOSE_FILES) *.sedbkp;
 
 
-ui/node_modules:docker-compose.yaml
-	docker-compose run ui npm install -y --production=false
+ui/package-lock.json:ui/package.json
+	docker-compose run ui npm i -y --package-lock-only
 
+ui/node_modules:ui/package-lock.json | 
+	docker-compose run ui npm ci -y
 
 .PHONY:up
 up:docker-compose.yaml ui/node_modules
-	docker-compose up -d; \
-	make pull-images
+	docker-compose up -d
 
+.PHONY:up-rebuild
+up-rebuild:docker-compose.yaml ui/node_modules
+	docker-compose up --build -d
 
 .PHONY:down
 down:docker-compose.yaml
@@ -79,18 +107,6 @@ restart:docker-compose.yaml
 logs:
 	docker-compose logs -f --tail=30
 
-
-.PHONY:pull-images
-pull-images:
-	docker-compose exec docker /bin/bash -c "cd /build && ./pull-images"
-
-
-.PHONY:create-es-indexes
-create-es-indexes:
-	curl -s -X PUT http://localhost:9200/accessories > /dev/null; \
-		curl -s -X PUT http://localhost:9200/configs > /dev/null; \
-		curl -s -X PUT http://localhost:9200/directives > /dev/null; \
-		curl -s -X PUT http://localhost:9200/indicators > /dev/null; \
-		curl -s -X PUT http://localhost:9200/models > /dev/null; \
-		curl -s -X PUT http://localhost:9200/outputfiles > /dev/null; \
-		curl -s -X PUT http://localhost:9200/runs > /dev/null;
+.PHONY:build-dev-image
+build-dev-image:
+	docker-compose exec docker /bin/bash -c "cd /build && ./build-dev-image"

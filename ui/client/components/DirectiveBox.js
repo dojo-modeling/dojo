@@ -8,14 +8,18 @@ import Typography from '@material-ui/core/Typography';
 
 import { makeStyles, useTheme } from '@material-ui/core/styles';
 
+import HelperTip from './HelperTip';
+
 import { useDirective } from './SWRHooks';
 
 const useStyles = makeStyles((theme) => ({
   card: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     display: 'flex',
     justifyContent: 'space-between',
     padding: [[theme.spacing(1), theme.spacing(2), '10px']],
+    maxHeight: '104px',
+    overflowY: 'auto',
   },
   nextIcon: {
     color: 'yellow',
@@ -47,7 +51,16 @@ const DirectiveBox = ({
       }}
     >
       <span>
-        {!summaryPage && <Typography variant="subtitle1">Model Execution Directive:</Typography>}
+        {!summaryPage && (
+          <Typography variant="subtitle1">
+            <HelperTip
+              title="The command that will run your model. You can edit it with the pencil icon
+                to the right, or choose a new directive in the Shell History section above."
+            >
+              Model Execution Directive:
+            </HelperTip>
+          </Typography>
+        )}
         <NavigateNextIcon className={classes.nextIcon} />
         {directive?.command.split(/{{ | }}/).map((obj, i) => (
           (i % 2 === 0)
@@ -67,13 +80,14 @@ const DirectiveBox = ({
             )
         ))}
       </span>
-      { (summaryPage && directive?.command) && (
+      {directive?.command && (
         <IconButton
           component="span"
-          onClick={() => handleClick()}
+          onClick={() => handleClick(directive)}
           disabled={disableClick}
         >
-          <EditIcon />
+          {/* inherit pencil color on the summary page to toggle between enabled/disabled */}
+          <EditIcon style={{ color: summaryPage ? 'inherit' : '#fff' }} />
         </IconButton>
       )}
     </Card>

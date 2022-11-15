@@ -14,6 +14,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 	//"github.com/docker/docker/api/types/network"
@@ -30,23 +31,6 @@ type StatusPayload struct {
 	Status string `json:"status"`
 }
 
-func safeMarshal(v interface{}) string {
-	bytes, err := json.Marshal(v)
-	if err != nil {
-		LogError("toJSON Marshal error", err)
-		return err.Error()
-	}
-	return string(bytes)
-}
-
-// Helper for verbosity sake
-func notify(p *WebSocketPool, listeners []string, payload string) {
-	p.Direct <- DirectMessage{
-		Clients: listeners,
-		Message: WebSocketMessage{Channel: "docker/publish", Payload: payload},
-	}
-}
-
 type Docker struct {
 	Client *client.Client
 	Host   string
@@ -56,15 +40,22 @@ type UploadComplete struct {
 	Finished []string `json:"finished"`
 }
 
-func NewDocker(host string, port string) (*Docker, error) {
-	// If host doesn't contain a port, set port to default
-	client_host := client.WithHost(fmt.Sprintf("tcp://%s:%s", host, port))
+type BuildComplete struct {
+	Finished string `json:"finished"`
+}
+
+func NewDocker(host string) (*Docker, error) {
+	client_host := client.WithHost(fmt.Sprintf("tcp://%s:8375", host))
 	cli, err := client.NewClientWithOpts(client_host, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, err
 	}
 
 	return &Docker{Client: cli, Host: host}, nil
+}
+
+func (docker *Docker) Info(c context.Context) (types.Info, error) {
+	return docker.Client.Info(c)
 }
 
 func (docker *Docker) ListContainers() ([]types.Container, error) {
@@ -124,29 +115,29 @@ func (docker *Docker) Commit(
 		},
 	}
 
-	notify(pool, listenClients, safeMarshal(StatusPayload{Status: "Committing Container"}))
+	pool.DirectMessage(listenClients, "docker/publish", SafeMarshal(StatusPayload{Status: "Committing Container"}))
 	img, err := docker.Client.ContainerCommit(ctx, containerID, options)
 	if err != nil {
 		LogError("Container Commit", err)
-		notify(pool, listenClients, safeMarshal(ErrorPayload{Error: err.Error()}))
+		pool.DirectMessage(listenClients, "docker/publish", SafeMarshal(ErrorPayload{Error: err.Error()}))
 		return err
 	}
 
 	for _, tag := range tags {
 
 		log.Printf("Tagging %s", tag)
-		notify(pool, listenClients, safeMarshal(StatusPayload{Status: fmt.Sprintf("Tagging %s", tag)}))
+		pool.DirectMessage(listenClients, "docker/publish", SafeMarshal(StatusPayload{Status: fmt.Sprintf("Tagging %s", tag)}))
 		if err := docker.Client.ImageTag(ctx, img.ID, tag); err != nil {
 			LogError("Image Tag", err)
-			notify(pool, listenClients, safeMarshal(ErrorPayload{Error: err.Error()}))
+			pool.DirectMessage(listenClients, "docker/publish", SafeMarshal(ErrorPayload{Error: err.Error()}))
 			return err
 		}
 
 		resp, err := docker.Client.ImagePush(ctx, tag, types.ImagePushOptions{RegistryAuth: auth})
-		notify(pool, listenClients, safeMarshal(StatusPayload{Status: fmt.Sprintf("Pushing Tag: %s", tag)}))
+		pool.DirectMessage(listenClients, "docker/publish", SafeMarshal(StatusPayload{Status: fmt.Sprintf("Pushing Tag: %s", tag)}))
 		if err != nil {
 			LogError("Image Push", err)
-			notify(pool, listenClients, safeMarshal(ErrorPayload{Error: err.Error()}))
+			pool.DirectMessage(listenClients, "docker/publish", SafeMarshal(ErrorPayload{Error: err.Error()}))
 			return err
 		}
 
@@ -156,26 +147,25 @@ func (docker *Docker) Commit(
 			if err != nil {
 				if err != io.EOF {
 					LogError("Reading Response", err)
-					notify(pool, listenClients, safeMarshal(ErrorPayload{Error: err.Error()}))
+					pool.DirectMessage(listenClients, "docker/publish", SafeMarshal(ErrorPayload{Error: err.Error()}))
 					return err
 				}
 				break
 			}
 
 			log.Printf("%s", string(line))
-			notify(pool, listenClients, string(line))
+			pool.DirectMessage(listenClients, "docker/publish", string(line))
 		}
 
-		notify(pool, listenClients, safeMarshal(StatusPayload{Status: fmt.Sprintf("Finished Pushing Tag: %s", tag)}))
-
+		pool.DirectMessage(listenClients, "docker/publish", SafeMarshal(StatusPayload{Status: fmt.Sprintf("Finished Pushing Tag: %s", tag)}))
 	}
 
 	if err != nil {
 		LogError("Failed to Marshal Complete Response", err)
-		notify(pool, listenClients, safeMarshal(ErrorPayload{Error: err.Error()}))
+		pool.DirectMessage(listenClients, "docker/publish", SafeMarshal(ErrorPayload{Error: err.Error()}))
 		return err
 	}
-	notify(pool, listenClients, safeMarshal(UploadComplete{Finished: tags}))
+	pool.DirectMessage(listenClients, "docker/publish", SafeMarshal(UploadComplete{Finished: tags}))
 	return nil
 }
 
@@ -276,9 +266,10 @@ func (docker *Docker) Launch(image string, name string, entryPoint []string) (st
 			return "", err
 		}
 	}
+
 	hostConfig := &container.HostConfig{
-		AutoRemove: true,
-		Privileged: true,
+		AutoRemove:   true,
+		Privileged:   true,
 		CgroupnsMode: CgroupnsModeHost,
 		PortBindings: nat.PortMap{
 			"22/tcp": []nat.PortBinding{
@@ -295,7 +286,8 @@ func (docker *Docker) Launch(image string, name string, entryPoint []string) (st
 	}
 
 	containerConfig := &container.Config{
-		Image: image,
+		Hostname: "dojo.local",
+		Image:    image,
 		ExposedPorts: nat.PortSet{
 			"22/tcp":   {},
 			"6010/tcp": {},
@@ -324,4 +316,58 @@ func (docker *Docker) Launch(image string, name string, entryPoint []string) (st
 
 	return container.ID, err
 
+}
+
+func (docker *Docker) Build(pool *WebSocketPool, listenClients []string, body io.Reader, tag string) (types.IDResponse, error) {
+
+	var result types.IDResponse
+
+	resp, err := docker.Client.ImageBuild(context.Background(),
+		body,
+		types.ImageBuildOptions{
+			Tags:           []string{tag},
+			SuppressOutput: false,
+			PullParent:     true,
+			ForceRemove:    true,
+			Remove:         true,
+		})
+
+	if err != nil {
+		log.Printf("Error %+v", err)
+		return result, err
+	}
+
+	log.Printf("Building OS Type %s\n", resp.OSType)
+
+	decoder := json.NewDecoder(resp.Body)
+	for {
+		var jsonMessage jsonmessage.JSONMessage
+		if err := decoder.Decode(&jsonMessage); err != nil {
+			if err == io.EOF {
+				break
+			}
+			LogError("Reading Response", err)
+			pool.DirectMessage(listenClients, "docker/build", SafeMarshal(ErrorPayload{Error: err.Error()}))
+			return result, err
+		}
+		if err := jsonMessage.Error; err != nil {
+			LogError("Error during docker build", err)
+			pool.DirectMessage(listenClients, "docker/build", SafeMarshal(ErrorPayload{Error: err.Error()}))
+			return result, err
+		}
+		if jsonMessage.Aux != nil {
+			var r types.BuildResult
+			if err := json.Unmarshal(*jsonMessage.Aux, &r); err != nil {
+				LogError("Failed to unmarshal aux message. Cause: %s", err)
+				pool.DirectMessage(listenClients, "docker/build", SafeMarshal(ErrorPayload{Error: err.Error()}))
+			} else {
+				result.ID = r.ID
+			}
+		}
+
+		pool.DirectMessage(listenClients, "docker/build", SafeMarshal(jsonMessage))
+	}
+	log.Printf("Docker Build Complete. Tag: %s, ID: %s\n", tag, result.ID)
+	pool.DirectMessage(listenClients, "docker/build", SafeMarshal(BuildComplete{Finished: tag}))
+	return result, nil
 }

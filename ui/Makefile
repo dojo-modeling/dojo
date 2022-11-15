@@ -5,7 +5,7 @@
 # gnumake curl git
 # docker docker-compose
 
-VERSION := 0.1.0
+VERSION := 1.0.0
 
 DEV ?= $(strip $(if $(findstring y,$(prod)),,dev))
 
@@ -64,7 +64,7 @@ npm_lint:   ## Format js files
 
 .PHONY: npm_build
 npm_build:  ## Build npm package
-	npm run build
+	rm -fr dist/; npm run build
 
 .PHONY: fmt
 fmt:| npm_lint ## Format all

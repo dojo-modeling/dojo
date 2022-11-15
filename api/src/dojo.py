@@ -1,6 +1,5 @@
-
-import hashlib
 import os
+import io
 import requests
 import uuid
 
@@ -9,10 +8,11 @@ from typing import List
 from elasticsearch import Elasticsearch
 from elasticsearch.exceptions import NotFoundError
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Response, status, Request, HTTPException
+from fastapi.responses import StreamingResponse
 from validation import DojoSchema
 from src.settings import settings
-from src.utils import delete_matching_records_from_model
+from src.utils import delete_matching_records_from_model, put_rawfile, get_rawfile, stream_csv_from_data_paths, compress_stream
 import logging
 
 logger = logging.getLogger(__name__)
@@ -131,24 +131,16 @@ def import_json_data():
 def create_directive(payload: DojoSchema.ModelDirective):
     """
     Create a `directive` for a model. This is the command which is used to execute
-    the model container. The `directive` is templated out using Jinja, where each templated `{{ item }}`
-    maps directly to the name of a specific `parameter.
+    the model container. The `directive` is given a set of parameters and the indices
+    that must be modified in order to insert the user parameters.
     """
 
-    try:
-        es.update(index="directives", body={"doc": payload.dict()}, id=payload.model_id)
-        return Response(
-            status_code=status.HTTP_200_OK,
-            headers={"location": f"/dojo/directive/{payload.model_id}"},
-            content=f"Created directive for model with id = {payload.model_id}",
-        )
-    except NotFoundError:
-        es.index(index="directives", body=payload.json(), id=payload.model_id)
-        return Response(
-            status_code=status.HTTP_201_CREATED,
-            headers={"location": f"/dojo/directive/{payload.model_id}"},
-            content=f"Created directive for model with id = {payload.model_id}",
-        )
+    es.index(index="directives", body=payload.json(), id=payload.model_id)
+    return Response(
+        status_code=status.HTTP_201_CREATED,
+        headers={"location": f"/dojo/directive/{payload.model_id}"},
+        content=f"Created directive for model with id = {payload.model_id}",
+    )
 
 
 @router.get("/dojo/directive/{model_id}")
@@ -176,33 +168,44 @@ def copy_directive(model_id: str, new_model_id: str):
     d = DojoSchema.ModelDirective(**directive)
     create_directive(d)
 
+def get_config_path(model_id, path):
+    return f'{settings.CONFIG_STORAGE_BASE}{model_id}{path}'
+
 @router.post("/dojo/config")
-def create_configs(payload: List[DojoSchema.ModelConfig]):
+def create_configs(payload: List[DojoSchema.ModelConfigCreate]):
     """
     Create one or more model `configs`. A `config` is a settings file which is used by the model to
-    set a specific parameter level. Each `config` is stored to S3, templated out using Jinja, where each templated `{{ item }}`
-    maps directly to the name of a specific `parameter.
+    set a specific parameter level. Each `config` is stored to S3 and contains a list of parameters
+    which show which indices to replace with user input.
     """
     if len(payload) == 0:
         return Response(status_code=status.HTTP_400_BAD_REQUEST,content=f"No payload")
 
-    for p in payload:
+    for config_data in payload:
+        model_config = config_data.model_config
+        file_content = config_data.file_content
 
         # remove existing configs with this model_id and path
-        response = es.search(index="configs", body=search_for_config(p.model_id, p.path))
+        response = es.search(index="configs", body=search_for_config(model_config.model_id, model_config.path), size=10000)
         for hit in response["hits"]["hits"]:
             es.delete(index="configs", id=hit["_id"])
 
-        es.index(index="configs", body=p.json())
+        fileobj = io.BytesIO(file_content.encode('utf-8'))
+        put_rawfile(
+            get_config_path(model_config.model_id, model_config.path),
+            fileobj
+        )
+
+        es.index(index="configs", body=model_config.json())
     return Response(
         status_code=status.HTTP_201_CREATED,
-        headers={"location": f"/dojo/config/{p.model_id}"},
-        content=f"Created config(s) for model with id = {p.model_id}",
+        headers={"location": f"/dojo/config/{model_config.model_id}"},
+        content=f"Created config(s) for model with id = {model_config.model_id}",
     )
 
 @router.get("/dojo/config/{model_id}")
 def get_configs(model_id: str) -> List[DojoSchema.ModelConfig]:
-    results = es.search(index="configs", body=search_by_model(model_id))
+    results = es.search(index="configs", body=search_by_model(model_id), size=10000)
     try:
         return [i["_source"] for i in results["hits"]["hits"]]
     except:
@@ -219,7 +222,7 @@ def delete_config(model_id: str, path: str):
     maps directly to the name of a specific `parameter.
     """
 
-    response = es.search(index="configs", body=search_for_config(model_id, path))
+    response = es.search(index="configs", body=search_for_config(model_id, path), size=10000)
 
     config_count, param_count = 0, 0
     for hit in response["hits"]["hits"]:
@@ -249,18 +252,38 @@ def copy_configs(model_id: str, new_model_id: str):
     configs = get_configs(model_id)
     if type(configs) == Response:
         return False
-    new_configs = []
+    config_create_request = []
 
     for config in configs:
+        content = get_rawfile(
+            get_config_path(config['model_id'], config['path'])
+        ).read().decode()
         config['id'] = str(uuid.uuid4())
         config['model_id'] = new_model_id
 
-        c = DojoSchema.ModelConfig(**config)
-        new_configs.append(c)
+        config_data = DojoSchema.ModelConfigCreate(
+            model_config=DojoSchema.ModelConfig(**config),
+            file_content=content
+        )
+        config_create_request.append(config_data)
 
-    create_configs(new_configs)
+    create_configs(config_create_request)
 
 
+
+@router.get("/dojo/parameters/{model_id}")
+def get_parameters(model_id: str) -> List[DojoSchema.Parameter]:
+    config_params = [ param for config in get_configs(model_id)
+                            for param in config['parameters']
+                    ]
+    try:
+        directive_params = [ param for param in get_directive(model_id)['parameters']]
+        return config_params + directive_params
+    except Exception as e:
+        logger.info(f"No directives returned. Likely using a defunct model. Directive fetch failed with: {e}")
+        return config_params
+    
+    
 
 @router.post("/dojo/outputfile")
 def create_outputfiles(payload: List[DojoSchema.ModelOutputFile]):
@@ -284,7 +307,7 @@ def create_outputfiles(payload: List[DojoSchema.ModelOutputFile]):
 
 @router.get("/dojo/outputfile/{model_id}")
 def get_outputfiles(model_id: str) -> List[DojoSchema.ModelOutputFile]:
-    results = es.search(index="outputfiles", body=search_by_model(model_id))
+    results = es.search(index="outputfiles", body=search_by_model(model_id), size=10000)
     try:
         return [i["_source"] for i in results["hits"]["hits"]]
     except:
@@ -365,7 +388,7 @@ def get_accessory_files(model_id: str) -> List[DojoSchema.ModelAccessory]:
     """
 
     try:
-        results = es.search(index="accessories", body=search_by_model(model_id))
+        results = es.search(index="accessories", body=search_by_model(model_id), size=10000)
         return [i["_source"] for i in results["hits"]["hits"]]
     except:
         return Response(
@@ -422,7 +445,7 @@ def create_accessory_files(payload: List[DojoSchema.ModelAccessory]):
 
     # Delete previous entries.
     try:
-        results = es.search(index="accessories", body=search_by_model(payload[0].model_id))
+        results = es.search(index="accessories", body=search_by_model(payload[0].model_id), size=10000)
         for i in results["hits"]["hits"]:
             es.delete(index="accessories", id=i["_source"]["id"])
     except Exception as e:
@@ -482,3 +505,62 @@ def copy_accessory_files(model_id: str, new_model_id: str):
         model_accessories.append(ma)
 
     create_accessory_files(model_accessories)
+
+@router.get("/dojo/domains", response_model=List[str])
+def get_domains() -> List[str]:
+    """
+    Returns the full list of scientific domains acceptable to be applied to models and indicators.
+    Source: https://skos.um.es/unesco6/view.php?fmt=1
+    """
+
+    domains = [
+        "Logic",
+        "Mathematics",
+        "Astronomy and astrophysics",
+        "Physics",
+        "Chemistry",
+        "Life Sciences",
+        "Earth and Space Sciences",
+        "Agricultural Sciences",
+        "Medical Sciences",
+        "Technological Sciences",
+        "Anthropology",
+        "Demographics",
+        "Economic Sciences",
+        "Geography",
+        "History",
+        "Juridical Sciences and Law",
+        "Linguistics",
+        "Pedagogy",
+        "Political Science",
+        "Psychology",
+        "Science of Arts and Letters",
+        "Sociology",
+        "Ethics",
+        "Philosophy",
+    ]
+
+    return domains
+
+
+@router.get("/dojo/download/csv/{index}/{obj_id}")
+def get_csv(index: str, obj_id: str, request: Request , wide_format: str = 'false'):
+    try:
+        run = es.get(index=index, id=obj_id)["_source"]
+    except NotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    run_status = run.get("attributes", {}).get("status", None)
+
+    if "deflate" in request.headers.get("accept-encoding", ""):
+        return StreamingResponse(
+            compress_stream(stream_csv_from_data_paths(run["data_paths"], wide_format)),
+            media_type="text/csv",
+            headers={'Content-Encoding': 'deflate'}
+        )
+    else:
+        return StreamingResponse(
+            stream_csv_from_data_paths(run["data_paths"],wide_format),
+            media_type="text/csv",
+        )
+

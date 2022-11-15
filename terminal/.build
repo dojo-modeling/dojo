@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+
+VERSION="1.0.0"
+TAG="terminal-${VERSION}"
+
+GROUP=jataware
+NAME=terminal-api
+IMAGE="${GROUP}/${NAME}"
+
+docker build --no-cache -f Dockerfile \
+       --build-arg TERMINAL_VERSION="${VERSION}" \
+       -t "${IMAGE}:${TAG}" \
+       .

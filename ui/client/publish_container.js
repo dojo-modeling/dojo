@@ -5,6 +5,7 @@ import axios from 'axios';
 import AddIcon from '@material-ui/icons/Add';
 import Card from '@material-ui/core/Card';
 import CardContent from '@material-ui/core/CardContent';
+import CircularProgress from '@material-ui/core/CircularProgress';
 import CloseIcon from '@material-ui/icons/Close';
 import IconButton from '@material-ui/core/IconButton';
 import LinearProgress from '@material-ui/core/LinearProgress';
@@ -15,10 +16,11 @@ import { useHistory } from 'react-router-dom';
 
 import { makeStyles } from '@material-ui/core/styles';
 
-import { useContainerWithWorker, useDirective, useModel } from './components/SWRHooks';
+import HelperTip from './components/HelperTip';
+
+import { useDirective, useModel } from './components/SWRHooks';
 
 import {
-  WebSocketContextProvider,
   useWebSocketUpdateContext,
 } from './context';
 
@@ -47,6 +49,7 @@ const useStyles = makeStyles((theme) => ({
   cardContentShort: {
     position: 'relative',
     padding: theme.spacing(1),
+    display: 'flex',
   },
   minimized: {
     position: 'fixed',
@@ -61,18 +64,19 @@ const useStyles = makeStyles((theme) => ({
     right: 0,
     top: 0,
   },
+  spinner: {
+    marginLeft: theme.spacing(2),
+  },
 }));
 
-const imageTags = (name, modelId) => {
+const imageTags = (modelId) => {
   const imagePrefix = process.env.NODE_ENV === 'development' ? 'dojo-test' : 'dojo-publish';
-  return [`${imagePrefix}:${name}-${modelId}`];
+  return [`${imagePrefix}:${modelId}`];
 };
 
-const Page = ({ workerNode, setUploading, afterUpload}) => {
-  const { container } = useContainerWithWorker(workerNode);
-  const { model } = useModel(container.model_id);
+const PublishContainer = ({ modelId, setUploading, mutateModel }) => {
+  const { model } = useModel(modelId);
   const classes = useStyles();
-  const [totalProgress, setTotalProgress] = useState(0);
   const [enableFinished, setEnableFinished] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [uploadInProgress, setUploadInProgress] = useState(false);
@@ -88,10 +92,10 @@ const Page = ({ workerNode, setUploading, afterUpload}) => {
   }));
 
   const {
-    getWebSocketId, register, unregister, closeSocket
+    getWebSocketId, register, unregister
   } = useWebSocketUpdateContext();
 
-  const { directive, directiveLoading } = useDirective(container?.model_id);
+  const { directive, directiveLoading } = useDirective(modelId);
 
   // set up our listener for the info that we get back from the websocket connection
   useEffect(() => {
@@ -104,7 +108,6 @@ const Page = ({ workerNode, setUploading, afterUpload}) => {
         error,
         status,
         aux: { Tag, Digest } = { Tag: null, Digest: null },
-        progressDetail,
         progress,
         finished,
       } = JSON.parse(item);
@@ -131,14 +134,9 @@ const Page = ({ workerNode, setUploading, afterUpload}) => {
           publish: { status: 'finished', message: '' }
         }));
         setEnableFinished(true);
-        setTotalProgress(100);
       } else {
-        // we're in progress, so keep our publish info updated and set our progress percentage
+        // we're in progress, so keep our publish info updated
         setPublishInfo((p) => ({ ...p, publish: { status, message: progress } }));
-        if (progressDetail?.current) {
-          const { current, total } = progressDetail;
-          setTotalProgress(Math.min((current / total) * 100, 100).toFixed(2));
-        }
       }
     };
 
@@ -156,7 +154,7 @@ const Page = ({ workerNode, setUploading, afterUpload}) => {
     const publishContainer = async (wsid) => {
       // the info to send to the server
       const postBody = {
-        tags: imageTags(container.name, container.model_id),
+        tags: imageTags(modelId),
         cwd: directive?.cwd,
         entrypoint: [],
         listeners: [wsid],
@@ -165,8 +163,7 @@ const Page = ({ workerNode, setUploading, afterUpload}) => {
       console.debug(directive);
       console.debug('start publish');
       console.debug(postBody);
-      // make the POST
-      await fetch(`/api/terminal/docker/${workerNode}/commit/${container.id}`, {
+      await fetch(`/api/terminal/docker/${modelId}/commit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -201,39 +198,40 @@ const Page = ({ workerNode, setUploading, afterUpload}) => {
     // otherwise, set our uploading flag and call run() to set off the upload (only once)
     setUploadInProgress(true);
     run();
-  }, [directive, directiveLoading, getWebSocketId, container, workerNode, uploadInProgress]);
+  }, [directive, directiveLoading, getWebSocketId, modelId, uploadInProgress]);
 
   useEffect(() => {
     if (enableFinished && !cleanupComplete) {
       // only try to do this once, unless our request to patch the dojo model.image below fails
       setCleanupComplete(true);
-      console.debug('manually close socket');
-      closeSocket();
 
       // only store the image name in the model if it isn't already there
       if (publishInfo.image !== model.image) {
         console.debug('patching model');
         // link image to model
-        axios.patch(`/api/dojo/models/${container.model_id}`, { image: publishInfo?.image })
-          .then((resp) => {
-            // Call afterUpload passed in from summary page to refresh model and any other cleanup
-            // Delay is to allow for document store to refresh
-            setTimeout(afterUpload, 300);
+        axios.patch(`/api/dojo/models/${modelId}`, { image: publishInfo?.image })
+          .then(() => {
+            // set model.image with local data once we know our PATCH was successful
+            // false as the second param tells SWR to not revalidate, as we don't want
+            // to risk elasticsearch being out of date right after the patch
+            mutateModel({ ...model, image: publishInfo?.image }, false);
+
+            // then tell SWR to fetch the model in 5 seconds, which should give ES enough time
+            setTimeout(() => mutateModel(), 5000);
           })
           .catch((error) => {
             // if attaching the image name to the model, retry
             console.log('There was an error: ', error);
             setCleanupComplete(false);
           });
+      // cleanup
       }
 
       console.debug('%cPublished Info', 'background: #fff; color: #000');
       console.debug(publishInfo);
-      console.debug('%cPublished Container', 'background: #fff; color: #000');
-      console.debug(container);
 
-      // change the url to get rid of the ?save=true query param so we won't try to upload again
-      history.replace(`/summary?worker=${workerNode}`);
+      // recreate our url without the upload state, so we won't try to upload again
+      history.replace(`${history.location.pathname}${history.location.search}`);
 
       // close the dialog after 3 seconds
       // TODO: maybe leave the dialog open with a note about the final publish step
@@ -241,14 +239,13 @@ const Page = ({ workerNode, setUploading, afterUpload}) => {
     }
   }, [
     enableFinished,
-    container,
     publishInfo,
-    workerNode,
-    closeSocket,
     setUploading,
-    history,
     cleanupComplete,
-    model
+    model,
+    modelId,
+    history,
+    mutateModel,
   ]);
 
   const handleButtonClick = () => {
@@ -280,7 +277,13 @@ const Page = ({ workerNode, setUploading, afterUpload}) => {
             >
               <AddIcon />
             </IconButton>
-            <Typography variant="subtitle2">Uploading: {totalProgress}%</Typography>
+            {enableFinished ? <Typography variant="subtitle2">Upload Complete</Typography>
+              : (
+                <>
+                  <Typography variant="subtitle2">Uploading Model</Typography>
+                  <CircularProgress size="20px" className={classes.spinner} />
+                </>
+              )}
           </div>
         </Card>
       ) : (
@@ -293,30 +296,26 @@ const Page = ({ workerNode, setUploading, afterUpload}) => {
             >
               {enableFinished ? <CloseIcon /> : <RemoveIcon />}
             </IconButton>
-            <Typography variant="subtitle1" gutterBottom>
-              {enableFinished
-                ? 'Upload Complete.' : `Uploading Model to Docker Hub [${totalProgress}%]`}
-            </Typography>
-            <LinearProgress color="primary" variant="determinate" value={totalProgress} />
+            <HelperTip
+              title="Your model will be saved to Docker Hub before you can publish it.
+                Please do not close your browser while the upload is in progress. Make sure
+                to click PUBLISH once the upload is complete."
+              dark
+            >
+              <Typography variant="subtitle1" component="span" gutterBottom data-test="summaryUploadDialog">
+                {enableFinished
+                  ? 'Upload Complete.' : 'Uploading Model to Docker Hub'}
+              </Typography>
+            </HelperTip>
+            <LinearProgress
+              color="primary"
+              variant={enableFinished ? 'determinate' : 'indeterminate'}
+              value={enableFinished ? 100 : 0}
+            />
           </CardContent>
         </Card>
       )}
     </>
-  );
-};
-
-const PublishContainer = ({ worker, setUploading, afterUpload }) => {
-  // const { worker } = useParams();
-  let proto = 'ws:';
-  if (window.location.protocol === 'https:') {
-    proto = 'wss:';
-  }
-  const url = `${proto}//${window.location.host}/api/ws/${worker}`;
-
-  return (
-    <WebSocketContextProvider url={url} autoConnect>
-      <Page workerNode={worker} setUploading={setUploading} afterUpload={afterUpload} />
-    </WebSocketContextProvider>
   );
 };
 

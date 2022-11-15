@@ -21,10 +21,11 @@ from pydantic import BaseModel
 from pydantic.json import pydantic_encoder
 from typing_extensions import final
 
-from validation import RunSchema
+from validation import RunSchema, DojoSchema
 
 from src.models import get_model
-from src.dojo import get_directive, get_outputfiles, get_configs, get_accessory_files
+from src.dojo import get_directive, get_outputfiles, get_configs, get_accessory_files, get_config_path
+from src.utils import get_rawfile
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ headers = {"Content-Type": "application/json"}
 
 
 @router.get("/runs")
-def search_runs(request: Request, model_name: str = Query(None), model_id: str = Query(None)) -> List[RunSchema.ModelRunSchema]:
+def search_runs(request: Request, model_name: str = Query(None), model_id: str = Query(None), size=100, scroll_id=None) -> DojoSchema.RunSearchResult:
     """
     Allows users to search for runs. Note that a `model_name` or `model_id` query argument
     will be used to filter the records in elasticsearch. Any other arbitrary `&key=value` pairs
@@ -63,6 +64,7 @@ def search_runs(request: Request, model_name: str = Query(None), model_id: str =
     know ahead of time what all of the possible key/values are that people might search for in
     the run's parameters, we're accessing the raw FastAPI/Starlette request object's query args.
     """
+
     if model_name:
         q = {"query": {"term": {"model_name.keyword": {"value": model_name, "boost": 1.0}}}}
     elif model_id:
@@ -70,24 +72,47 @@ def search_runs(request: Request, model_name: str = Query(None), model_id: str =
     else:  # no model name specified
         q = {"query": {"match_all": {}}}
 
-    response = es.search(index="runs", body=q)
-    results = [i["_source"] for i in response["hits"]["hits"]]
+    count = es.count(index='runs', body=q)
+
+    if count["count"] == 0:
+        return {
+            "hits": 0,
+            "scroll_id": None,
+            "results": []
+        }
+
+    if not scroll_id:
+        results = es.search(index='runs', body=q, scroll="2m", size=size)
+    else:
+        results = es.scroll(scroll_id=scroll_id, scroll="2m")
 
     param_filters = dict(request.query_params)
 
     # don't use these keys to filter params
-    for reserved_param in ["model_id", "model_name"]:
+    for reserved_param in ["model_id", "model_name", "size", "scroll_id"]:
         param_filters.pop(reserved_param, None)
 
+    # if results are less than the page size don't return a scroll_id
+    if len(results["hits"]["hits"]) < int(size):
+        scroll_id = None
+    else:
+        scroll_id = results.get("_scroll_id", None)
+
+    results = [i["_source"] for i in results["hits"]["hits"]]
+
     if not param_filters:
-        return results  # no need to filter params
+        return {
+            "hits": count["count"],
+            "scroll_id": scroll_id,
+            "results": results,
+        }
 
     to_return = []
-    for result in results:
 
+    for result in results:
         run_params = {}  # convert run's params into dict for quick lookups
         for param in result.get("parameters", []):
-            run_params[ param["name"] ] = param["value"]
+            run_params[param["name"]] = param["value"]
 
         for filter_key, filter_value in param_filters.items():
             run_param_value = run_params.get(filter_key)
@@ -99,7 +124,11 @@ def search_runs(request: Request, model_name: str = Query(None), model_id: str =
                     if filter_value == str(run_param_value):
                         to_return.append(result)
 
-    return to_return
+    return {
+        "hits": count["count"],
+        "scroll_id": scroll_id,
+        "results": to_return,
+    }
 
 
 @router.get("/runs/{run_id}")
@@ -115,22 +144,26 @@ def dispatch_run(run):
     return
 
 
+def replace_along_params(string, new_values, available_parameters):
+    # Assuming no overlap
+    for param in sorted(available_parameters, key=lambda param: param['start'], reverse=True):
+        name = param["annotation"]["name"]
+        value = new_values[name] if name in new_values else param["annotation"]["default_value"]
+        string = string[:param["start"]] + str(value) + string[param["end"]:]
+    return string
+
 @router.post("/runs")
 def create_run(run: RunSchema.ModelRunSchema):
     model = get_model(run.model_id)
 
-    # handle model run command
-    directive = get_directive(run.model_id)
-    model_command = Template(directive.get("command"))
-
     # get parameters
-    params = run.parameters
-    param_dict = {}
-    for p in params:
-        param_dict[p.name] = p.value
+    params = {p.name: p.value for p in run.parameters}
 
     # generate command based on directive template
-    model_command = model_command.render(param_dict)
+    directive = get_directive(run.model_id)
+
+    model_command = replace_along_params(directive.get("command"), params, directive.get("parameters"))
+
     logging.info(f"Model Command is: {model_command}")
 
     ### Handle output files and append to volumeArray.
@@ -138,11 +171,11 @@ def create_run(run: RunSchema.ModelRunSchema):
     outputfiles = get_outputfiles(run.model_id) # call dojo.py API method directly.
     output_dirs = {}
     mixmasta_inputs = []
-    volumeArray = [ "/var/run/docker.sock:/var/run/docker.sock" ]
+    volumeArray = ["/var/run/docker.sock:/var/run/docker.sock"]
     for output in outputfiles:
         try:
             # rehydrate file path in
-            mixmasta_input_file = Template(output["path"]).render(param_dict)
+            mixmasta_input_file = Template(output["path"]).render(params)
 
             # get name of the mapper (will be based on output ID)
             mapper_name = f"mapper_{output['id']}.json"
@@ -192,7 +225,7 @@ def create_run(run: RunSchema.ModelRunSchema):
 
             # use the lookup to build the path
             try:
-                # Ussing the accessory_file id (uuid) is breaking the docker mount:
+                # Using the accessory_file id (uuid) is breaking the docker mount:
                 #accessory_dir_volume = dmc_local_dir + f"/results/{run.id}/accessories/{accessory_dirs[accessory_dir]}:{accessory_dir}"
                 accessory_dir_volume = dmc_local_dir + f"/results/{run.id}/accessories:{accessory_dir}"
                 logger.info('accessory_dir_volume: ' + accessory_dir_volume)
@@ -207,34 +240,31 @@ def create_run(run: RunSchema.ModelRunSchema):
     # get config in s3
     try:
         configs = get_configs(run.model_id)
-        configsData = configs
     except Exception as e:
-        configsData = []
+        configs = []
         logging.exception(e)
 
-
-    model_config_s3_path_objects = []
+    model_config_objects = []
 
     # get volumes
-    for configFile in configsData:
-        if 'fileName' in configFile:
-            mountPath = configFile["path"]
-            fileName = configFile["fileName"]
+    for config_file in configs:
 
-        # This is the typical case currently with the ui/templater
-        else:
-            mountPath = '/'.join(configFile["path"].split("/")[:-1])
-            fileName = configFile["path"].split("/")[-1]
-        savePath = dmc_local_dir + f"/model_configs/{run.id}/{fileName}"
-        model_config_s3_path_objects.append(
+        mount_path = '/'.join(config_file["path"].split("/")[:-1])
+        file_name = config_file["path"].split("/")[-1]
+        save_path = dmc_local_dir + f"/model_configs/{run.id}/{file_name}"
+        file_content = get_rawfile(
+            get_config_path(run.model_id, config_file["path"])
+        ).read().decode()
+        model_config_objects.append(
             {
-                "s3_url": configFile["s3_url"],
-                "savePath": savePath,
-                "path": mountPath,
-                "fileName": fileName,
+                "file_content": file_content,
+                "save_path": save_path,
+                "path": mount_path,
+                "file_name": file_name,
+                "parameters": config_file["parameters"]
             }
         )
-        volumeArray.append(dmc_local_dir + f"/model_configs/{run.id}/{fileName}:{mountPath}/{fileName}")
+        volumeArray.append(dmc_local_dir + f"/model_configs/{run.id}/{file_name}:{mount_path}/{file_name}")
 
     # remove redundant volume mounts
     volumeArray = list(set(volumeArray))
@@ -248,8 +278,8 @@ def create_run(run: RunSchema.ModelRunSchema):
         "model_command": model_command,
         # "model_output_directory": model_output_directory,
         "dojo_url": dojo_url,
-        "params": param_dict,
-        "s3_config_files": model_config_s3_path_objects,
+        "params": params,
+        "config_files": model_config_objects,
         "volumes": json.dumps(volumeArray),
         "mixmasta_cmd": f"causemosify-multi --inputs='{json.dumps(mixmasta_inputs)}' --output-file=/tmp/{run.id}_{run.model_id}",
     }
@@ -268,6 +298,11 @@ def create_run(run: RunSchema.ModelRunSchema):
     logging.info(f"Response from DMC: {json.dumps(response.json(), indent=4)}")
 
     run.created_at = current_milli_time()
+    if hasattr(run, 'attributes'):
+        run.attributes["status"] = "Running"
+    else:
+        run.attributes = {"status": "Running"}
+
     es.index(index="runs", body=run.dict(), id=run.id)
     return Response(
         status_code=status.HTTP_201_CREATED,
@@ -306,7 +341,7 @@ def get_run_logs(run_id: str) -> RunSchema.RunLogsSchema:
         "failed-task": "Run failed",
     }
 
-    for task in sorted(task_instances, key=itemgetter("start_date")):
+    for task in sorted(task_instances, key=lambda obj: obj.get("start_date") or ""):
         task_id = task["task_id"]
         task_name = task_name_map.get(task_id, task_id)
 
@@ -337,3 +372,18 @@ def update_run(payload: RunSchema.ModelRunSchema):
         headers={"location": f"/api/runs/{run_id}"},
         content=f"Updated run with id = {run_id}",
     )
+
+@router.get("/runs/{run_id}/test")
+def test_run_status(run_id: str) -> RunSchema.RunStatusSchema:
+    run = get_run(run_id)
+    status = run.get("attributes",{}).get("status",None)
+    model_id = run.get("model_id")
+    body = {"run_id": run_id,
+            "status": status,
+            "model_name": run.get("model_name"),
+            "executed_at": run.get("attributes",{}).get("executed_at",None)}
+    if status:
+        es.index(index="tests", body=body, id=model_id)
+        return status
+    else:
+        return "running"

@@ -5,57 +5,39 @@ import (
 )
 
 const (
-	REDIS_CONTAINER_KEY        = "closeau:container:%s"
-	REDIS_CONTAINER_HISTORY    = "closeau:container:%s:history"
-	REDIS_CONTAINER_EDITS      = "closeau:container:%s:edits"
-	REDIS_CONTAINER_PROVISIONS = "closeau:container:%s:provisions"
+	REDIS_CONTAINER_KEY     = "terminal:container:%s"
+	REDIS_CONTAINER_HISTORY = "terminal:history:%s"
 )
 
 type ContainerStore struct {
-	Id            string
-	editsKey      string
-	historyKey    string
-	metaKey       string
-	provisionsKey string
-	redis         *RedisStore
+	Id      string
+	metaKey string
+	redis   *RedisStore
 }
 
-func NewContainerStore(redis *RedisStore, id string) *ContainerStore {
-	return &ContainerStore{
-		redis:         redis,
-		Id:            id,
-		editsKey:      fmt.Sprintf(REDIS_CONTAINER_EDITS, id),
-		historyKey:    fmt.Sprintf(REDIS_CONTAINER_HISTORY, id),
-		metaKey:       fmt.Sprintf(REDIS_CONTAINER_KEY, id),
-		provisionsKey: fmt.Sprintf(REDIS_CONTAINER_PROVISIONS, id),
+func NewContainerStore(redis *RedisStore, id string, initInfo map[string]string) (*ContainerStore, error) {
+	store := &ContainerStore{
+		redis:   redis,
+		Id:      id,
+		metaKey: fmt.Sprintf(REDIS_CONTAINER_KEY, id),
 	}
-}
 
-func (c *ContainerStore) InitalizeContainerStore() error {
-	if err := c.redis.HSet(c.metaKey, map[string]string{"id": c.Id}); err != nil {
-		return err
+	if err := store.AddMeta(map[string]string{"id": id}); err != nil {
+		return &ContainerStore{}, err
 	}
-	return nil
-}
 
-func (c *ContainerStore) AddProvisions(provisions [][]string) error {
-	for _, item := range provisions {
-		if err := c.redis.AppendListList(c.provisionsKey, item); err != nil {
-			return err
-		}
+	if err := store.AddMeta(initInfo); err != nil {
+		return &ContainerStore{}, err
 	}
-	return nil
-}
 
-func (c *ContainerStore) AddEdits(edits map[string]string) error {
-	return c.redis.AppendListMap(c.editsKey, edits)
-}
-
-func (c *ContainerStore) AddHistory(history map[string]string) error {
-	return c.redis.AppendListMap(c.historyKey, history)
+	return store, nil
 }
 
 func (c *ContainerStore) AddMeta(meta map[string]string) error {
-
 	return c.redis.HSet(c.metaKey, meta)
+}
+
+func ContainerAddHistory(redis *RedisStore, modelId string, history map[string]string) error {
+	historyKey := fmt.Sprintf(REDIS_CONTAINER_HISTORY, modelId)
+	return redis.AppendListMap(historyKey, history)
 }

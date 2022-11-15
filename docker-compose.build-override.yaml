@@ -1,83 +1,151 @@
 services:
-  annotate:
-    command:
-      - python3
-      - manage.py
-      - runserver
-      - 0.0.0.0:8000
+  airflow-init:
     environment:
-      - REDIS_HOST
-    env_file:
-      - envfile
+      DOCKER_URL: "docker.dojo-stack:8375"
+      DMC_LOCAL_DIR:
+      MIXMASTA_VERSION:
     networks:
-      - dojo
-  processor:
-    env_file:
-      - envfile
-    networks:
-      - dojo
-  templater:
-    env_file:
-      - envfile
+      - dojo-stack
+    volumes:
+      - dmc-data-results:/data/results
+      - dmc-data-mappers:/mappers
+      - dmc-data-model_configs:/model_configs
+  airflow-redis:
     environment:
-      - DOJO_HOST
-      - AWS_ACCESS_KEY_ID
-      - AWS_SECRET_ACCESS_KEY
-      - S3_BUCKET=${ANNOTATION_S3_BUCKET}
+      DOCKER_URL: "docker.dojo-stack:8375"
+      DMC_LOCAL_DIR:
+      MIXMASTA_VERSION:
     networks:
-      - dojo
+      - dojo-stack
+  airflow-postgres:
+    environment:
+      DOCKER_URL: "docker.dojo-stack:8375"
+      DMC_LOCAL_DIR:
+      MIXMASTA_VERSION:
+    networks:
+      - dojo-stack
+  airflow-scheduler:
+    environment:
+      DOCKER_URL: "docker.dojo-stack:8375"
+      DMC_LOCAL_DIR:
+      MIXMASTA_VERSION:
+    networks:
+      - dojo-stack
+    volumes:
+      - dmc-data-results:/data/results
+      - dmc-data-mappers:/mappers
+      - dmc-data-model_configs:/model_configs
+  airflow-webserver:
+    environment:
+      DOCKER_URL: "docker.dojo-stack:8375"
+      DMC_LOCAL_DIR:
+      MIXMASTA_VERSION:
+    networks:
+      - dojo-stack
+    volumes:
+      - dmc-data-results:/data/results
+      - dmc-data-mappers:/mappers
+      - dmc-data-model_configs:/model_configs
+  airflow-worker:
+    environment:
+      AIRFLOW_CONN_AWS_DEFAULT: aws://${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY_ENCODED}@
+      DOCKER_URL: "docker.dojo-stack:8375"
+      DMC_LOCAL_DIR:
+      MIXMASTA_VERSION:
+    networks:
+      - dojo-stack
+    volumes:
+      - dmc-data-results:/data/results
+      - dmc-data-mappers:/mappers
+      - dmc-data-model_configs:/model_configs
+  flower:
+    environment:
+      DOCKER_URL: "docker.dojo-stack:8375"
+      DMC_LOCAL_DIR:
+      MIXMASTA_VERSION:
+    networks:
+      - dojo-stack
   api:
-    command: ["uvicorn", "server:api", "--host", "0.0.0.0", "--port", "80", "--reload", "--reload-dir", "src", "--log-config", "logging.yaml"]
+    command:
+      [
+        "uvicorn",
+        "server:api",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "80",
+        "--reload",
+        "--reload-dir",
+        "src",
+        "--log-config",
+        "logging.yaml"
+      ]
     volumes:
       - ./api:/api
+      - local-storage:/storage
     env_file:
       - envfile
     environment:
       - DOJO_URL
       - DMC_LOCAL_DIR
       - DMC_URL
-      - DMC_PORT      
       - DMC_PASSWORD
       - REDIS_HOST
       - DOCKERHUB_USER
       - DOCKERHUB_PWD
     networks:
-      - dojo
-  terminal_api:
+      - dojo-stack
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+  terminal:
     command: -debug -pull-images=false
-    build:
-      context: ./terminal/api
-      dockerfile: Dockerfile
-    image: dojomodeling/terminal:terminal_api-dev
     volumes:
       - ${PWD}/terminal/api/server/settings.yaml:/home/app/connector/settings.yaml:rw
     env_file:
       - envfile
     environment:
       - DOCKERHUB_AUTH
-      - TERMINAL_WORKERS=${DOCKER_URL}:${DOCKER_PORT}
     networks:
-      - dojo
+      - dojo-stack
+    depends_on:
+      - redis
   kibana:
     env_file:
       - envfile
     networks:
-      - dojo
+      - dojo-stack
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
   elasticsearch:
     env_file:
       - envfile
     networks:
-      - dojo
+      - dojo-stack
+    healthcheck:
+      interval: 3s
+      retries: 20
+      test:
+      - CMD
+      - curl
+      - --fail
+      - http://localhost:9200/_cluster/health
+      timeout: 3s
   redis:
     env_file:
       - envfile
     networks:
-      - dojo
+      - dojo-stack
   docker:
     env_file:
       - envfile
     networks:
-      - dojo
+      - dojo-stack
+    volumes:
+      - dmc-data-results:/data/results
+      - dmc-data-mappers:/data/mappers
+      - dmc-data-model_configs:/data/model_configs
   ui:
     build:
       context: ./ui/
@@ -102,11 +170,35 @@ services:
       - --host
       - 0.0.0.0
     networks:
-      - dojo
-
+      - dojo-stack
+    volumes:
+      - dmc-data-results:/data/results
+      - dmc-data-mappers:/mappers
+      - dmc-data-model_configs:/model_configs
+  perm-fixer:
+    build:
+      context: ./build/perm-fixer/
+    volumes:
+      - dmc-data-results:/data/results
+      - dmc-data-mappers:/data/mappers
+      - dmc-data-model_configs:/data/model_configs
+  rqworker:
+    env_file:
+      - envfile
+    networks:
+      - dojo-stack
+    depends_on:
+      - redis
+    volumes:
+      - local-storage:/storage
 
 networks:
-  dojo:
+  dojo-stack:
     driver: bridge
-    name: dojo
+    name: dojo-stack
 
+volumes:
+  dmc-data-results:
+  dmc-data-mappers:
+  dmc-data-model_configs:
+  local-storage:

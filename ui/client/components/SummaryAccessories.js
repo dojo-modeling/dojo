@@ -8,7 +8,7 @@ import FileCardList from './FileCardList';
 
 import { useAccessories } from './SWRHooks';
 
-export default function SummaryAccessories({ modelId, disableClick }) {
+export default function SummaryAccessories({ modelId, disableClick, hideExpandHeader }) {
   const {
     accessories, accessoriesLoading, accessoriesError, mutateAccessories
   } = useAccessories(modelId);
@@ -46,6 +46,7 @@ export default function SummaryAccessories({ modelId, disableClick }) {
           setAccessoryToDelete(accessory);
           setDeleteAccessoryDialogOpen(true);
         }}
+        hideExpandHeader={hideExpandHeader}
         primaryIcon={<DeleteIcon />}
         disableClick={disableClick}
         cardContent={(accessory) => {

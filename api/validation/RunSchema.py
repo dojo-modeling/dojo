@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from typing import List, Optional, Union
-
+from enum import Enum
 from pydantic import BaseModel, Extra, Field
 from pydantic.utils import Obj
 
@@ -96,3 +96,8 @@ class RunLogsSchema(BaseModel):
         description="tasks",
         title="tasks",
     )
+
+class RunStatusSchema(Enum):
+    success = "success"
+    running = "running"
+    failed = "failed"     

@@ -1,21 +1,21 @@
 import React from 'react';
 
 import CircularProgress from '@material-ui/core/CircularProgress';
+import Link from '@material-ui/core/Link';
 import Typography from '@material-ui/core/Typography';
 import { makeStyles } from '@material-ui/core/styles';
 
 const useStyles = makeStyles((theme) => ({
   loadingOverlay: {
-    backgroundColor: 'rgb(224,224,224,0.8)',
     left: 0,
     height: '100%',
     position: 'absolute',
-    top: 0,
+    // leave space for the navbar so it is still clickable
+    top: '48px',
     width: '100%',
-    zIndex: '9999',
     display: 'flex',
     flexDirection: 'column',
-    paddingTop: theme.spacing(30),
+    paddingTop: theme.spacing(24),
     alignItems: 'center',
   },
   text: {
@@ -25,7 +25,9 @@ const useStyles = makeStyles((theme) => ({
 }));
 
 // pass in blank error prop to hide spinner
-function LoadingOverlay({ text, error }) {
+function LoadingOverlay({
+  text, error, link
+}) {
   const classes = useStyles();
 
   let errorTextHeader;
@@ -66,6 +68,7 @@ function LoadingOverlay({ text, error }) {
         </>
       )}
       {!error && <CircularProgress />}
+      {link && <Link variant="h6" href={link.href}>{link.text}</Link>}
     </div>
   );
 }

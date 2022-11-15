@@ -1,0 +1,62 @@
+FROM {{ .Image }} as build
+
+USER root
+
+ENV DEBIAN_FRONTEND noninteractive
+
+RUN rm -f /usr/local/bin/entrypoint.sh && \
+    rm -rf /home/clouseau/.tools && \
+    rm -f /home/clouseau/.bash-preexec && \
+    rm -f /home/clouseau/.hooks
+
+RUN apt-get update && apt-get clean && apt-get install -y \
+    sudo \
+    gpg-agent \
+    openssh-server \
+    git \
+    wget \
+    curl \
+    zip \
+    bash-completion
+
+RUN mkdir -p /var/run/sshd && \
+    mkdir -p /var/log/connector && \
+    chmod 777 /var/log/connector && \
+    ssh-keygen -A && \
+    sed -ri 's/^#?PermitRootLogin\s+.*/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+    sed -ri 's/^#?PrintMotd\s+.*/PrintMotd yes/' /etc/ssh/sshd_config && \
+    sed -ri 's/UsePAM yes/#UsePAM yes/g' /etc/ssh/sshd_config && \
+    echo "clouseau ALL=NOPASSWD:ALL" >> /etc/sudoers.d/50-clouseau
+
+RUN useradd --user-group --create-home clouseau || true && \
+    usermod -s /bin/bash clouseau && \
+    echo "clouseau:clouseau" | chpasswd clouseau && \
+    echo 'Defaults    env_keep += "DEBIAN_FRONTEND"' > /etc/sudoers.d/env_keep
+
+COPY connector dojo dojo-preexec entrypoint.sh /usr/bin/
+COPY 10-bash-hooks.sh /etc/profile.d/10-bash-hooks.sh
+COPY bash-preexec /etc/.bash-preexec
+COPY hooks /etc/.hooks
+COPY dojo-completion /usr/share/bash-completion/completions/dojo
+RUN dojo --help > /etc/motd
+
+RUN chmod +x \
+    /usr/bin/connector \
+    /usr/bin/dojo \
+    /usr/bin/entrypoint.sh \
+    /usr/bin/dojo-preexec \
+    /etc/profile.d/10-bash-hooks.sh \
+    /etc/.bash-preexec \
+    /etc/.hooks
+
+
+RUN chown -v -R clouseau:clouseau /home/clouseau
+
+FROM scratch
+COPY --from=build / /
+
+USER clouseau
+WORKDIR /home/clouseau
+
+ENTRYPOINT []
+CMD ["entrypoint.sh"]

@@ -1,55 +1,75 @@
-# Dojo Modeling
+# Dojo integrated development environment
 
-<!-- <img src="docs/assets/Dojo_Logo_color.svg?raw=true" alt="Dojo logo" width=350 style="background-color: #DDDDDD; padding: 20px; padding-right: 35px; border-radius: 20px"/> -->
-<img src="docs/assets/Dojo_Logo_profile.png?raw=true" alt="Dojo logo" width=350 />
+
+This repo provides the following services, each of which is stored in a sub-directory 
+
+* **API** - Python based FastAPI back-end
+* **Tasks** - RQ task/job service for batch operations and data processing
+* **Terminal** - Provides an interface to allow manipulation of the inside 
+  of a docker container via a web interface over a websocket
+* **DMC (Domain Model Controller)** - Apache Airflow based system for 
+  running models and collecting results and artifacts
+* **UI** - React interface that ties the system together
 
 <br>
+
+
+The following services are also required:
+
+* [Elasticsearch](https://www.elastic.co/elasticsearch/)
+* [Redis](https://redis.io/)
+
 <br>
 
- Dojo modeling is a repository for registering, storing, and running data-science models.
+The services can be run on a single server, or can be deploy in a distributed fashion.
 
-*  During model registration, metadata is collected about the model to identify and parameterize the relevent configuration files and command line arguments to allow multiple model runs via the Dojo API or the Dojo-CLI tool.
-* Models are stored in specialized Docker containers. These containers can by pushed to DockerHub or a private Docker repo. The containers are portable and can be shared, downloaded, and run locally.
 
-<br>
+## Local development
 
-# Setup
+For convenient testing and development, the entire stack runs via Docker and comes with a make file
+which will compile the various services in to a single docker-compose stack and ensure that your
+requirements are all up-to-date.
+
+Please review the targets in the Makefile for further information.
+
+
+### Install/Setup
+
 
 1. Clone repo
-2. Run `$ make init` to configure and pull the required submodules
+2. Run `$ make init` to ensure environment is properly configured
 3. Add your secrets to the file `envfile`  
- -- NOTE: You should rarely, if ever, need to change any of the host names or ports. You should really only need to set the variables that are wrapped in `${...}`
-4. Run `$ make up` to build and bring online all services
-5. Run `$ make create-es-indexes` to create the elasticsearch indexes
-6. Setup is complete
+  - Create a (Dockerhub)[https://hub.docker.com/] account, if needed.
+  - Have properly restricted AWS keys, scoped to this project, handy. Or request on Jataware's Slack.
+  - envfile secrets updates:
+```
+DOCKERHUB_USER=your-dockerhub-username
+DOCKERHUB_PWD=your-saved-access-token
 
-# Running
+AWS_ACCESS_KEY_ID=keys-by-admin
+AWS_SECRET_KEY=secret-key-by-admin
+```
+-- NOTE: For local development or testing you should rarely, if ever, need to change any of the host names or ports. You should really only need to set the variables that are wrapped in `${...}`
+
+4. Run `$ make up` to build and bring online all services
+5. Setup is complete
+
+### Running locally
 
 To start all services: `$ make up`
 
 To stop all services: `$ make down`
 
-To force rebuild all images: `$ make rebuild all`
-
 To view logs: `$ make logs` or `$ docker-compose logs {service-name}`
 
 
-# Endpoints
+### Endpoints
 
-* ui: http://localhost:8080/
-* api: http://localhost:8000/
-* annotate: http://localhost:8001/
-* terminal: http://localhost:3000/
-* templater: http://localhost:5000/
-* elasticsearch: http://localhost:9200/
-* redis: http://localhost:6379/
+* Dojo UI: http://localhost:8080/
+* Dojo API: http://localhost:8000/
+* Terminal API: http://localhost:3000/
+* Elasticsearch: http://localhost:9200/
+* Redis: http://localhost:6379/
+* DMC (Airflow): http://localhost:8090/
 
-
-## Loading images to the internal Docker server
-
-When `make up` command is run, the Ubuntu image is pulled and loaded in to the internal docker server. As some of the images are quite large, for the sake of time and bandwidth only the Ubuntu image is automatically loaded.
-
-If you need a different base image loaded, you can load it with this command: `docker-compose exec docker docker pull jataware/dojo-publish:{base_image_tag_name}`
-
-Since the Docker service has a persistent volume, you should not need to rerun the command unless changes have been made to the image.
 

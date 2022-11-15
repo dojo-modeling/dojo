@@ -10,9 +10,9 @@ import json
 from requests import get, post
 
 
-s3_accessKey = os.getenv("AWS_ACCESS_KEY_ID")
-s3_secretKey = os.getenv("AWS_SECRET_ACCESS_KEY")
-bucket_name = os.getenv("DMC_BUCKET")
+s3_accessKey = os.getenv("AWS_ACCESS_KEY")
+s3_secretKey = os.getenv("AWS_SECRET_KEY")
+bucket_name = "jataware-world-modelers"
 
 # Specifics for S3 zipped json file
 s3_key = "indicators/jsons/s3_jsons.tar.gz"

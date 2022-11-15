@@ -20,24 +20,6 @@ class Id(BaseModel):
     )
 
 
-class Parameter1(BaseModel):
-    class Config:
-        extra = Extra.allow
-
-    name: str = Field(
-        ...,
-        description="The name of the parameter",
-        examples=["management_practice"],
-        title="Parameter Name",
-    )
-    value: Union[str, float, bool] = Field(
-        ...,
-        description="Set value of parameter during run",
-        examples=["irrig"],
-        title="Parameter Value",
-    )
-
-
 class Type(Enum):
     int = "int"
     float = "float"
@@ -58,21 +40,7 @@ class DataType(Enum):
     freeform = "freeform"
 
 
-class Type1(Enum):
-    int = "int"
-    float = "float"
-    str = "str"
-    boolean = "boolean"
-    datetime = "datetime"
-    lat = "lat"
-    lng = "lng"
-    country = "country"
-    admin1 = "admin1"
-    admin2 = "admin2"
-    admin3 = "admin3"
-
-
-class Type2(Enum):
+class OutputType(Enum):
     int = "int"
     float = "float"
     str = "str"
@@ -164,21 +132,6 @@ class Period(BaseModel):
     )
 
 
-class ConceptMatch(BaseModel):
-    name: Optional[str] = Field(
-        None,
-        description="The name of the concept component in the ontology",
-        examples=["wm/concept/humanitarian_assistance/food_aid"],
-        title="Concept Component Name",
-    )
-    score: Optional[float] = Field(
-        None,
-        description="A score between 0 and 1 representing the strength of the match",
-        examples=[0.785829484462738],
-        title="Match Score",
-    )
-
-
 class TemporalResolution(Enum):
     annual = "annual"
     monthly = "monthly"
@@ -204,6 +157,250 @@ class Resolution(BaseModel):
     )
 
 
+class Output(BaseModel):
+    class Config:
+        extra = Extra.allow
+
+    name: str = Field(
+        ...,
+        description="The name of the output variable",
+        examples=["management_practice"],
+        title="Output variable Name",
+    )
+    display_name: str = Field(
+        ...,
+        description="The user visible name of the output variable",
+        examples=["Management Practice"],
+        title="Output variable Display Name",
+    )
+    description: str = Field(
+        ...,
+        description="The description of the output variable",
+        examples=[
+            "The management practice to model. rf_highN corresponds to a high nitrogen management  practice. irrig corresponds to a high nitrogen, irrigated management practice. rf_0N  corresponds to a subsistence management practice. rf_lowN corresponds to a low nitrogen  managemet practice."
+        ],
+        title="Output variable Description",
+    )
+    type: OutputType = Field(
+        ..., description="The type of output variable", title="Output variable Type"
+    )
+    unit: Optional[str] = Field(
+        None,
+        description="The unit of the output variable",
+        examples=["degC"],
+        title="Unit",
+    )
+    unit_description: Optional[str] = Field(
+        None,
+        description="A short description of the unit",
+        examples=["degrees Celcius"],
+        title="Unit Description",
+    )
+    is_primary: bool = Field(
+        ...,
+        description="Does this variable represent data based on the primary time and location columns",
+        examples=[True],
+        title="Is Primary?",
+    )
+    additional_options: Optional[Dict[str, Any]] = Field(
+        None, description="Model specific extras", title="Additional Options"
+    )
+    data_resolution: Optional[Resolution] = Field(
+        None,
+        description="Spatial and temporal resolution of the data",
+        title="Data Resolution",
+    )
+    choices: Optional[List[str]] = Field(
+        None,
+        description="If the output variable is a string type, then enumerate the choices for that output variable",
+        examples=[["irrig", "rf_highN"]],
+        title="Output variable choices",
+    )
+    min: Optional[float] = Field(
+        None,
+        description="Inclusive min of output values",
+        examples=[5],
+        title="Output variable Min",
+    )
+    max: Optional[float] = Field(
+        None,
+        description="Inclusive max of output values",
+        examples=[10],
+        title="Output variable Max",
+    )
+
+
+class QualifierOutput(BaseModel):
+    class Config:
+        extra = Extra.allow
+
+    name: str = Field(
+        ...,
+        description="The name of the output qualifier column in data file",
+        examples=["service_type"],
+        title="Output Qualifier Column Name",
+    )
+    display_name: str = Field(
+        ...,
+        description="The user visible name of the output qualifier",
+        examples=["Type of money service"],
+        title="Output Qualifier Display Name",
+    )
+    description: str = Field(
+        ...,
+        description="The description of the output qualifier",
+        examples=["Type of money service used"],
+        title="Output Qualifier Description",
+    )
+    type: OutputType = Field(
+        ...,
+        description="The type of the output qualifier",
+        title="Output Qualifier Type",
+    )
+    unit: Optional[str] = Field(
+        None,
+        description="The unit of the output qualifier",
+        examples=["unitless"],
+        title="Unit",
+    )
+    unit_description: Optional[str] = Field(
+        None,
+        description="A short description of the unit",
+        examples=[""],
+        title="Unit Description",
+    )
+    related_features: List[str] = Field(
+        ...,
+        description="The feature names that this data should be used as a qualifier for",
+        title="Related Features",
+    )
+
+
+class ModelMetadataSchema(BaseModel):
+    class Config:
+        extra = Extra.allow
+
+    id: str = Field(
+        ...,
+        description="A unique model id",
+        examples=["123e4567-e89b-12d3-a456-426614174000"],
+        title="Model ID",
+    )
+    name: str = Field(
+        ..., description="The model name", examples=["DSSAT-PYTHIA"], title="Model Name"
+    )
+    family_name: str = Field(
+        ...,
+        description="The model family name",
+        examples=["DSSAT"],
+        title="Model Family Name",
+    )
+    description: str = Field(
+        ...,
+        description="The description of the model.",
+        examples=[
+            "The Decision Support System for Agrotechnology Transfer (DSSAT) comprises dynamic crop growth simulation model for over 40 crops. The model simulates growth development; and yield as a function of the soil-plant-atmosphere dynamics."
+        ],
+        title="Model Description",
+    )
+    created_at: Optional[int] = Field(
+        None,
+        description="When the model was registered",
+        examples=[1234567890000],
+        title="Model Registration Time",
+    )
+    category: Optional[List[str]] = Field(
+        None,
+        description="List of categories",
+        examples=[["Economic", "Agricultural"]],
+        title="Categories",
+    )
+    domains: Optional[List[str]] = Field(
+        None,
+        description="List of domains, based on UNESCO nomenclature for fields of science and technology - https://skos.um.es/unesco6/00/html",
+        examples=[["Medical Sciences", "Demographics"]],
+        title="Domains",
+    )
+    maintainer: Maintainer = Field(
+        ...,
+        description="Information about the model maintainer.",
+        title="Model Maintainer",
+    )
+    image: str = Field(
+        ...,
+        description="The name and tag of the model container image (on Dockerhub, etc.)",
+        examples=["DSSAT:latest"],
+        title="Container Image",
+    )
+    observed_data: Optional[List[Id]] = Field(
+        None,
+        description="A list of Cube IDs that represent observed data for this model",
+        title="Observed Data",
+    )
+    is_stochastic: Optional[bool] = Field(
+        False, description="Is the model stochastic", title="Is the model stochastic"
+    )
+
+    outputs: List[Output] = Field(
+        ..., description="An array of model outputs", title="Model Outputs"
+    )
+    qualifier_outputs: Optional[List[QualifierOutput]] = Field(
+        None,
+        description="An array describing the additional qualifier columns in the output data files",
+        title="Model Qualifier Outputs",
+    )
+    tags: Optional[List[str]] = Field(
+        None,
+        description="The tags associated with the model.",
+        examples=[["Agriculture"]],
+        title="Model Tags",
+    )
+    geography: Optional[Geography] = Field(
+        None,
+        description="Information about the geography covered by the model",
+        title="Geography",
+    )
+    period: Optional[Period] = Field(
+        None, description="Data ranges covered by the run", title="Run time period"
+    )
+
+    next_version: Optional[str] = Field(
+        None, description="UUID of the next version", title="next model version"
+    )
+
+    prev_version: Optional[str] = Field(
+        None, description="UUID of the pervious version", title="previous model version"
+    )
+
+    is_published: bool = Field(
+        description="Indicates whether the model has been published or is in a finalized state",
+        title="Is the model published/finalized",
+        default=False,
+    )
+
+    commit_message: Optional[str] = Field(
+        None,
+        description="Optional message explaining the intention of or changes to the model at time of publication",
+        examples=[{"commit_message": "Updated model to account for additional parameters"}],
+        title="Commit message",
+    )
+
+
+class ConceptMatch(BaseModel):
+    name: Optional[str] = Field(
+        None,
+        description="The name of the concept component in the ontology",
+        examples=["wm/concept/humanitarian_assistance/food_aid"],
+        title="Concept Component Name",
+    )
+    score: Optional[float] = Field(
+        None,
+        description="A score between 0 and 1 representing the strength of the match",
+        examples=[0.785829484462738],
+        title="Match Score",
+    )
+
+
 class OntologyComponents(BaseModel):
     concepts: List[ConceptMatch] = Field(
         ...,
@@ -222,7 +419,7 @@ class OntologyComponents(BaseModel):
     )
 
 
-class Parameter(BaseModel):
+class CausemosParameter(BaseModel):
     class Config:
         extra = Extra.allow
 
@@ -304,242 +501,42 @@ class Parameter(BaseModel):
     )
 
 
-class Output(BaseModel):
-    class Config:
-        extra = Extra.allow
-
-    name: str = Field(
-        ...,
-        description="The name of the output variable",
-        examples=["management_practice"],
-        title="Output variable Name",
-    )
-    display_name: str = Field(
-        ...,
-        description="The user visible name of the output variable",
-        examples=["Management Practice"],
-        title="Output variable Display Name",
-    )
-    description: str = Field(
-        ...,
-        description="The description of the output variable",
-        examples=[
-            "The management practice to model. rf_highN corresponds to a high nitrogen management  practice. irrig corresponds to a high nitrogen, irrigated management practice. rf_0N  corresponds to a subsistence management practice. rf_lowN corresponds to a low nitrogen  managemet practice."
-        ],
-        title="Output variable Description",
-    )
-    type: Type1 = Field(
-        ..., description="The type of output variable", title="Output variable Type"
-    )
-    unit: Optional[str] = Field(
-        None,
-        description="The unit of the output variable",
-        examples=["degC"],
-        title="Unit",
-    )
-    unit_description: Optional[str] = Field(
-        None,
-        description="A short description of the unit",
-        examples=["degrees Celcius"],
-        title="Unit Description",
-    )
+class CausemosOutput(Output):
     ontologies: OntologyComponents = Field(
         ...,
         description="The three ontological parts representing the concepts matched to this varible",
         title="Ontology Components",
     )
-    is_primary: bool = Field(
-        ...,
-        description="Does this variable represent data based on the primary time and location columns",
-        examples=[True],
-        title="Is Primary?",
-    )
-    additional_options: Optional[Dict[str, Any]] = Field(
-        None, description="Model specific extras", title="Additional Options"
-    )
-    data_resolution: Optional[Resolution] = Field(
-        None,
-        description="Spatial and temporal resolution of the data",
-        title="Data Resolution",
-    )
-    choices: Optional[List[str]] = Field(
-        None,
-        description="If the output variable is a string type, then enumerate the choices for that output variable",
-        examples=[["irrig", "rf_highN"]],
-        title="Output variable choices",
-    )
-    min: Optional[float] = Field(
-        None,
-        description="Inclusive min of output values",
-        examples=[5],
-        title="Output variable Min",
-    )
-    max: Optional[float] = Field(
-        None,
-        description="Inclusive max of output values",
-        examples=[10],
-        title="Output variable Max",
-    )
-
-
-class QualifierOutput(BaseModel):
     class Config:
         extra = Extra.allow
 
-    name: str = Field(
-        ...,
-        description="The name of the output qualifier column in data file",
-        examples=["service_type"],
-        title="Output Qualifier Column Name",
-    )
-    display_name: str = Field(
-        ...,
-        description="The user visible name of the output qualifier",
-        examples=["Type of money service"],
-        title="Output Qualifier Display Name",
-    )
-    description: str = Field(
-        ...,
-        description="The description of the output qualifier",
-        examples=["Type of money service used"],
-        title="Output Qualifier Description",
-    )
-    type: Type2 = Field(
-        ...,
-        description="The type of the output qualifier",
-        title="Output Qualifier Type",
-    )
-    unit: Optional[str] = Field(
-        None,
-        description="The unit of the output qualifier",
-        examples=["unitless"],
-        title="Unit",
-    )
-    unit_description: Optional[str] = Field(
-        None,
-        description="A short description of the unit",
-        examples=[""],
-        title="Unit Description",
-    )
+
+class CausemosQualifierOutput(QualifierOutput):
     ontologies: OntologyComponents = Field(
         ...,
         description="The three ontological parts representing the concepts matched to this output",
         title="Ontology Components",
     )
-    related_features: List[str] = Field(
-        ...,
-        description="The feature names that this data should be used as a qualifier for",
-        title="Related Features",
-    )
-
-
-class ModelMetadataSchema(BaseModel):
     class Config:
         extra = Extra.allow
 
-    id: str = Field(
-        ...,
-        description="A unique model id",
-        examples=["123e4567-e89b-12d3-a456-426614174000"],
-        title="Model ID",
-    )
-    name: str = Field(
-        ..., description="The model name", examples=["DSSAT-PYTHIA"], title="Model Name"
-    )
-    family_name: str = Field(
-        ...,
-        description="The model family name",
-        examples=["DSSAT"],
-        title="Model Family Name",
-    )
-    description: str = Field(
-        ...,
-        description="The description of the model.",
-        examples=[
-            "The Decision Support System for Agrotechnology Transfer (DSSAT) comprises dynamic crop growth simulation model for over 40 crops. The model simulates growth development; and yield as a function of the soil-plant-atmosphere dynamics."
-        ],
-        title="Model Description",
-    )
-    created_at: Optional[int] = Field(
-        None,
-        description="When the model was registered",
-        examples=[1234567890000],
-        title="Model Registration Time",
-    )
-    category: List[str] = Field(
-        ...,
-        description="List of categories",
-        examples=[["Economic", "Agricultural"]],
-        title="Categories",
-    )
-    maintainer: Maintainer = Field(
-        ...,
-        description="Information about the model maintainer.",
-        title="Model Maintainer",
-    )
-    image: str = Field(
-        ...,
-        description="The name and tag of the model container image (on Dockerhub, etc.)",
-        examples=["DSSAT:latest"],
-        title="Container Image",
-    )
-    observed_data: Optional[List[Id]] = Field(
-        None,
-        description="A list of Cube IDs that represent observed data for this model",
-        title="Observed Data",
-    )
-    is_stochastic: Optional[bool] = Field(
-        False, description="Is the model stochastic", title="Is the model stochastic"
-    )
-    parameters: List[Parameter] = Field(
+
+class CausemosModelMetadataSchema(ModelMetadataSchema):
+    parameters: List[CausemosParameter] = Field(
         ...,
         description="The parameters exposed for the model",
         title="Model Parameters",
     )
-    outputs: List[Output] = Field(
+    outputs: List[CausemosOutput] = Field(
         ..., description="An array of model outputs", title="Model Outputs"
     )
-    qualifier_outputs: Optional[List[QualifierOutput]] = Field(
+    qualifier_outputs: Optional[List[CausemosQualifierOutput]] = Field(
         None,
         description="An array describing the additional qualifier columns in the output data files",
         title="Model Qualifier Outputs",
     )
-    tags: Optional[List[str]] = Field(
-        None,
-        description="The tags associated with the model.",
-        examples=[["Agriculture"]],
-        title="Model Tags",
-    )
-    geography: Optional[Geography] = Field(
-        None,
-        description="Information about the geography covered by the model",
-        title="Geography",
-    )
-    period: Optional[Period] = Field(
-        None, description="Data ranges covered by the run", title="Run time period"
-    )
-
-    next_version: Optional[str] = Field(
-        None, description="UUID of the next version", title="next model version"
-    )
-
-    prev_version: Optional[str] = Field(
-        None, description="UUID of the pervious version", title="previous model version"
-    )
-
-    is_published: bool = Field(
-        description="Indicates whether the model has been published or is in a finalized state",
-        title="Is the model published/finalized",
-        default=False,
-    )
-
-    commit_message: Optional[str] = Field(
-        None,
-        description="Optional message explaining the intention of or changes to the model at time of publication",
-        examples=[{"commit_message": "Updated model to account for additional parameters"}],
-        title="Commit message",
-
-    )
+    class Config:
+        extra = Extra.allow
 
 
 class ModelMetadataPatchSchema(BaseModel):
@@ -584,6 +581,7 @@ class VersionSchema(BaseModel):
         title="Later versions",
     )
 
+
 class PublishSchema(BaseModel):
 
     commit_message: str = Field(
@@ -591,5 +589,22 @@ class PublishSchema(BaseModel):
         description="Optional message explaining the intention of or changes to the model at time of publication",
         examples=[{"commit_message": "Updated model to account for additional parameters"}],
         title="Commit message",
+
+    )
+
+
+class ModelFamilySchema(BaseModel):
+
+    display_name: str = Field(
+        ...,
+        description="Human readable display name",
+        examples=["Climate Models"],
+        title="Display Name",
+    )
+    family_name: str = Field(
+        ...,
+        description="A unique string used to identify the mode family, matches `family_name` field on a model",
+        examples=["climate"],
+        title="Family Name",
 
     )

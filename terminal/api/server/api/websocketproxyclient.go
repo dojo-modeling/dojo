@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	ws "github.com/gorilla/websocket"
 	"log"
 	"net/url"
+	"sync"
 	"time"
+
+	ws "github.com/gorilla/websocket"
 )
 
 type WebSocketProxyClient struct {
@@ -18,13 +20,14 @@ type WebSocketProxyClient struct {
 	In                 chan WebSocketMessage
 	Out                chan WebSocketMessage
 	Open               bool
+	mu                 sync.Mutex
 	parentCtx          context.Context
 	ctx                context.Context
 	cancel             context.CancelFunc
 }
 
 func NewWebSocketProxyClient(parentCtx context.Context, parentID string, server string,
-	messageRouter func(WebSocketMessage)) *WebSocketProxyClient {
+	messageRouter func(WebSocketMessage), mutex sync.Mutex) *WebSocketProxyClient {
 	addr := fmt.Sprintf("%s:6010", server)
 	u := url.URL{Scheme: "ws", Host: addr, Path: "/websocket"}
 	return &WebSocketProxyClient{
@@ -35,6 +38,7 @@ func NewWebSocketProxyClient(parentCtx context.Context, parentID string, server 
 		In:                 make(chan WebSocketMessage),
 		Out:                make(chan WebSocketMessage),
 		Open:               false,
+		mu:                 mutex,
 		parentCtx:          parentCtx,
 	}
 }
@@ -82,7 +86,6 @@ func (c *WebSocketProxyClient) Connect() error {
 }
 
 func (c *WebSocketProxyClient) Read() {
-	c.Conn.SetReadLimit(512)
 	c.Conn.SetReadDeadline(time.Now().Add(PONG_WAIT))
 	c.Conn.SetPongHandler(func(string) error {
 		c.Conn.SetReadDeadline(time.Now().Add(PONG_WAIT))
@@ -101,6 +104,8 @@ func (c *WebSocketProxyClient) Read() {
 				if err != nil {
 					if ws.IsUnexpectedCloseError(err, ws.CloseGoingAway, ws.CloseAbnormalClosure) {
 						LogError("Proxy Conn ReadMessage Error", err)
+					} else {
+						log.Printf("Proxy Conn Closed Reason: %+v\n", err)
 					}
 					return
 				}
@@ -126,7 +131,10 @@ func (c *WebSocketProxyClient) Read() {
 	}()
 
 	defer func() {
+		log.Printf("Closing Proxy")
+		c.mu.Lock()
 		err := c.Conn.WriteMessage(ws.CloseMessage, ws.FormatCloseMessage(ws.CloseNormalClosure, ""))
+		c.mu.Unlock()
 		if err != nil {
 			LogError("Proxy Write close:", err)
 			return
@@ -139,9 +147,14 @@ func (c *WebSocketProxyClient) Read() {
 		select {
 		case msg := <-c.In:
 			c.Conn.SetWriteDeadline(time.Now().Add(WRITE_WAIT_DEADLINE))
-			if err := c.Conn.WriteJSON(msg); err != nil {
+			c.mu.Lock()
+			err := c.Conn.WriteJSON(msg)
+			c.mu.Unlock()
+			if err != nil {
 				if ws.IsUnexpectedCloseError(err, ws.CloseGoingAway, ws.CloseAbnormalClosure) {
 					LogError("Reply Error", err)
+				} else {
+					log.Printf("Normal Closing - Proxy Client Closed Reason: %+v\n", err)
 				}
 				return
 			}
@@ -163,10 +176,14 @@ func (c *WebSocketProxyClient) KeepAlive() {
 		case <-ticker.C:
 			c.Conn.SetWriteDeadline(time.Now().Add(WRITE_WAIT_DEADLINE))
 			log.Printf("Send Keep Alive Id: %s\n", c.ID)
-			if err := c.Conn.WriteMessage(ws.PingMessage, nil); err != nil {
+			c.mu.Lock()
+			err := c.Conn.WriteMessage(ws.PingMessage, nil)
+			c.mu.Unlock()
+			if err != nil {
 				if ws.IsUnexpectedCloseError(err, ws.CloseGoingAway, ws.CloseAbnormalClosure) {
 					LogError("Unexpected Error Keep Alive:", err)
 				} else {
+					log.Printf("Keep Alive Proxy Client Closed Reason: %+v\n", err)
 					log.Printf("Keep Alive Proxy Client gone - Id: %s\n", c.ID)
 				}
 				return

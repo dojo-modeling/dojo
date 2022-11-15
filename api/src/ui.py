@@ -14,6 +14,8 @@ from src.dockerhub import get_image_tags
 logger: Logger = logging.getLogger(__name__)
 router = APIRouter()
 
+BASE_IMAGES_KEY = "dojo-ui:base_images"
+
 
 class BaseImageItem(BaseModel):
     sort_order: Optional[int]

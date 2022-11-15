@@ -32,13 +32,11 @@ def get_health():
     # DMC Status
     try:
         url = f"{dmc_base_url}/health"
-        logger.info(f"Checking DMC status at: {url}")
         response = requests.get(url, auth=(dmc_user, dmc_pass))
         dmc_status = response.json()["metadatabase"]["status"]
         print(f"DMC: {dmc_status}")
     except Exception as e:
         logger.exception(e)
-        logger.exception(response.text)
         dmc_status = "broken"
 
     # DOJO (actually ElasticSearch Health) Status

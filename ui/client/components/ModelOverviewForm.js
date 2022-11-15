@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 import * as yup from 'yup';
 import Button from '@material-ui/core/Button';
@@ -10,6 +10,8 @@ import FormikTextField from './FormikTextField';
 
 const useStyles = makeStyles((theme) => ({
   buttonContainer: {
+    display: 'flex',
+    justifyContent: 'space-between',
     marginTop: theme.spacing(2),
     '& :first-child': {
       marginRight: theme.spacing(1),
@@ -26,7 +28,7 @@ export const overviewValidationSchema = yup.object({
     .required('Model family is required'),
   description: yup
     .string('Enter a model description')
-    .min(8, 'Description should be at least 250 characters')
+    .min(30, 'Description should be at least 30 characters')
     .required('Description is required'),
   maintainer: yup.object().shape({
     website: yup
@@ -37,7 +39,7 @@ export const overviewValidationSchema = yup.object({
 });
 
 export const ModelOverviewFields = ({
-  formik
+  formik, lockFamilyName
 }) => (
   <>
     <FormikTextField
@@ -54,6 +56,7 @@ export const ModelOverviewFields = ({
     <FormikTextField
       name="family_name"
       label="Model Family"
+      disabled={lockFamilyName}
       formik={formik}
     />
     <FormikTextField
@@ -69,7 +72,7 @@ export const ModelOverviewFields = ({
 );
 
 export const ModelOverview = ({
-  modelInfo, handleNext
+  modelInfo, handleNext, lockFamilyName, resetFirstForm, setResetFirstForm
 }) => {
   const classes = useStyles();
   const formik = useFormik({
@@ -78,13 +81,35 @@ export const ModelOverview = ({
     onSubmit: (values) => {
       handleNext(values);
     },
+    // we need this to allow the family name to come through after the modelInfo prop updates
+    enableReinitialize: true,
   });
+
+  useEffect(() => {
+    // saving the form state every 1 second is probably sufficient
+    const debounced = setTimeout(() => {
+      localStorage.setItem('modelStep', 0);
+      localStorage.setItem('modelInfo', JSON.stringify(formik.values));
+    }, 1000);
+    // clear the previous timeout if more changes are made, meaning we wait another 1s
+    return () => clearTimeout(debounced);
+  }, [formik]);
+
+  useEffect(() => {
+    // when the parent stepper tells this form to reset
+    if (resetFirstForm) {
+      // but make sure we tell the parent we've done it, and cancel future resets
+      setResetFirstForm(false);
+
+      formik.resetForm();
+    }
+  }, [resetFirstForm, setResetFirstForm, formik]);
 
   return (
     <FormikProvider value={formik}>
       <form onSubmit={formik.handleSubmit}>
+        <ModelOverviewFields formik={formik} lockFamilyName={lockFamilyName} />
         <div className={classes.buttonContainer}>
-          <ModelOverviewFields formik={formik} />
           <Button disabled>
             Back
           </Button>
@@ -93,6 +118,7 @@ export const ModelOverview = ({
             data-test="modelFormOverviewNextBtn"
             type="submit"
             variant="contained"
+            disableElevation
           >
             Next
           </Button>

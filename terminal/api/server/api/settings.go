@@ -7,20 +7,20 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 )
 
-const DefaultDockerServerPort = "8375"
-
-type DockerServer struct {
-	Host string `yaml:host`
-	Port string `yaml:port`
+type AutoShutdownSettings struct {
+	AutoShutdownTime      time.Duration
+	AutoShutdownWarning   time.Duration
+	AutoShutdownHeartbeat time.Duration
 }
 
 type DockerSettings struct {
-	Hosts []DockerServer
-	Auth  string
-	Org   string `yaml:"org"`
+	Auth string
+	Org  string `yaml:"org"`
 }
 
 func (d DockerSettings) String() string {
@@ -28,7 +28,7 @@ func (d DockerSettings) String() string {
 	if l >= len(d.Auth) {
 		l = len(d.Auth)
 	}
-	return fmt.Sprintf("{Org:%s Hosts:%s Auth:%s...}", d.Org, d.Hosts, d.Auth[0:l])
+	return fmt.Sprintf("{Org:%s Auth:%s...}", d.Org, d.Auth[0:l])
 }
 
 type SSHSettings struct {
@@ -41,10 +41,17 @@ type RedisSettings struct {
 	Port string `yaml:"port"`
 }
 
+type HttpSettings struct {
+	Static string `yaml:"static"`
+}
+
 type Settings struct {
-	Docker DockerSettings `yaml:"docker"`
-	SSH    SSHSettings    `yaml:"ssh"`
-	Redis  RedisSettings  `yaml:"redis"`
+	Docker               DockerSettings `yaml:"docker"`
+	SSH                  SSHSettings    `yaml:"ssh"`
+	Redis                RedisSettings  `yaml:"redis"`
+	Http                 HttpSettings   `yaml:"http"`
+	AutoShutdownSettings AutoShutdownSettings
+	BootstrapWorkers     []string
 }
 
 func GetEnvFatal(key string) string {
@@ -62,6 +69,21 @@ func SetEnvOptional(set *string, key string) {
 		log.Printf("No Env override for key: %s", key)
 	} else {
 		*set = v
+	}
+}
+
+func SetEnvOptionalDuration(set *time.Duration, key string, duration time.Duration, defaultDuration time.Duration) {
+	v := os.Getenv(key)
+	if v == "" {
+		log.Printf("No Env override for key: %s, using default duration", key)
+		*set = defaultDuration
+	} else {
+		if intVar, err := strconv.Atoi(v); err != nil {
+			log.Printf("Error converting string to int: %s, using default duration", v, key)
+			*set = defaultDuration
+		} else {
+			*set = time.Duration(intVar) * duration
+		}
 	}
 }
 
@@ -90,26 +112,23 @@ func NewSettings(fp string) *Settings {
 	SetEnvOptional(&settings.Redis.Host, "REDIS_HOST")
 	SetEnvOptional(&settings.Redis.Port, "REDIS_PORT")
 	SetEnvOptional(&settings.Docker.Org, "DOCKERHUB_ORG")
+	SetEnvOptional(&settings.Http.Static, "HTTP_STATIC")
 
-	settings.Docker.Org = GetEnvFatal("DOCKERHUB_ORG")
+	SetEnvOptionalDuration(&settings.AutoShutdownSettings.AutoShutdownTime, "AUTO_SHUTDOWN_TIME", time.Minute, 15*time.Minute)
+	SetEnvOptionalDuration(&settings.AutoShutdownSettings.AutoShutdownWarning, "AUTO_SHUTDOWN_WARNING_TIME", time.Minute, settings.AutoShutdownSettings.AutoShutdownTime-(1*time.Minute))
+	SetEnvOptionalDuration(&settings.AutoShutdownSettings.AutoShutdownHeartbeat, "AUTO_SHUTDOWN_HEARTBEAT", time.Second, 5*time.Second)
+
+	if settings.Docker.Org == "" {
+		log.Printf("No settings for Docker.Org were found, using default = jataware")
+		settings.Docker.Org = "jataware"
+	}
+
+	if settings.Http.Static == "" {
+		log.Fatal("Missing http static dir")
+	}
+
 	settings.Docker.Auth = GetEnvFatal("DOCKERHUB_AUTH")
-	terminalWorkerStrings := GetEnvAsSlice("TERMINAL_WORKERS", ",")
-	for _, workerString := range terminalWorkerStrings {
-		var host, port string
-		if strings.Contains(workerString, ":") {
-			parts := strings.Split(workerString, ":")
-			host = parts[0]
-			port = parts[1]
-		} else {
-			host = workerString
-			port = DefaultDockerServerPort
-		}
-		settings.Docker.Hosts = append(settings.Docker.Hosts, DockerServer{Host: host, Port: port})
-	}
-
-	if len(settings.Docker.Hosts) == 0 {
-		log.Fatalf("Missing TERMINAL_WORKERS")
-	}
+	settings.BootstrapWorkers = GetEnvAsSlice("TERMINAL_WORKERS", ",")
 
 	return &settings
 }

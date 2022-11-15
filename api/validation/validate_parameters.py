@@ -14,6 +14,7 @@ def validate_parameters(
         Example: {"param1": "foo", "param2": 1}
     model_parameters:
         The "parameters" key of the "type" field of the database model, i.e. db.Model.type['parameters']
+        See here: https://gitlab-ext.galois.com/world-modelers/galois-internal/supermaas/-/blob/master/supermaas/supermaas/api/models.py#L29
 
     Returns:
         List[ValueError] containing any errors found

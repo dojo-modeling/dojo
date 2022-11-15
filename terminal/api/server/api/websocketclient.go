@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	ws "github.com/gorilla/websocket"
-	"github.com/rs/xid"
 	"log"
 	"sync"
 	"time"
+
+	ws "github.com/gorilla/websocket"
 )
 
 type WebSocketClient struct {
 	ID              string
+	ModelId         string
 	containerID     string
 	DockerServer    string
 	Conn            *ws.Conn
@@ -27,15 +28,19 @@ type WebSocketClient struct {
 	cancel          context.CancelFunc
 }
 
-func NewWebSocketClient(conn *ws.Conn, pool *WebSocketPool, dockerServer string, settings *Settings, redisStore *RedisStore) *WebSocketClient {
+func (c WebSocketClient) String() string {
+	return fmt.Sprintf("ID: %s, ModelId: %s, ContainerId: %s, Host: %s, Addr: %s", c.ID, c.ModelId, c.containerID, c.DockerServer, c.Conn.RemoteAddr())
+}
+
+func NewWebSocketClient(conn *ws.Conn, pool *WebSocketPool, dockerServer string, settings *Settings, redisStore *RedisStore, id string, modelId string) *WebSocketClient {
 	sshServer := fmt.Sprintf("%s:2224", dockerServer)
 	user := settings.SSH.User
 	pass := settings.SSH.Password
-	id := xid.New().String()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	client := WebSocketClient{
 		ID:           id,
+		ModelId:      modelId,
 		Conn:         conn,
 		Pool:         pool,
 		DockerServer: dockerServer,
@@ -46,7 +51,7 @@ func NewWebSocketClient(conn *ws.Conn, pool *WebSocketPool, dockerServer string,
 	}
 
 	client.Ssh = NewSSHD(ctx, sshServer, user, pass, client.RouteSSHMessages)
-	client.ProxyWS = NewWebSocketProxyClient(ctx, id, dockerServer, client.RouteProxyMessages)
+	client.ProxyWS = NewWebSocketProxyClient(ctx, id, dockerServer, client.RouteProxyMessages, client.mu)
 	return &client
 }
 
@@ -120,12 +125,9 @@ func (c *WebSocketClient) InspectReplyMessage(message WebSocketMessage) {
 			LogError("Unmarshall error", err)
 			return
 		}
-		if c.containerID != "" {
-			store := NewContainerStore(c.redisStore, c.containerID)
 
-			LogTrace("Appending Store History %s: %+v", c.containerID, history)
-			store.AddHistory(history)
-		}
+		LogTrace("Appending Store History %s: %+v", c.ModelId, history)
+		ContainerAddHistory(c.redisStore, c.ModelId, history)
 	}
 }
 
@@ -143,7 +145,6 @@ func (c *WebSocketClient) Read() {
 	c.clientReplyChan = make(chan WebSocketMessage)
 	defer c.Stop()
 
-	c.Conn.SetReadLimit(512)
 	c.Conn.SetReadDeadline(time.Now().Add(PONG_WAIT))
 	c.Conn.SetPongHandler(func(string) error {
 		c.Conn.SetReadDeadline(time.Now().Add(PONG_WAIT))
@@ -156,9 +157,14 @@ func (c *WebSocketClient) Read() {
 			case msg := <-c.clientReplyChan:
 				c.InspectReplyMessage(msg)
 				c.Conn.SetWriteDeadline(time.Now().Add(WRITE_WAIT_DEADLINE))
-				if err := c.Conn.WriteJSON(msg); err != nil {
+				c.mu.Lock()
+				err := c.Conn.WriteJSON(msg)
+				c.mu.Unlock()
+				if err != nil {
 					if ws.IsUnexpectedCloseError(err, ws.CloseGoingAway, ws.CloseAbnormalClosure) {
 						LogError("Reply Error", err)
+					} else {
+						log.Printf("Conn Closed Reason: %+v\n", err)
 					}
 					return
 				}
@@ -175,9 +181,11 @@ func (c *WebSocketClient) Read() {
 
 		if err != nil {
 			if ws.IsUnexpectedCloseError(err, ws.CloseGoingAway, ws.CloseAbnormalClosure) {
+				LogError("Unexpected Close Conn ReadMessage Error", err)
+			} else {
 				LogError("Conn ReadMessage Error", err)
+				LogTrace("Client Reader Closed")
 			}
-			LogTrace("Client Reader Closed")
 			break
 		}
 
@@ -213,10 +221,14 @@ func (c *WebSocketClient) KeepAlive() {
 		case <-ticker.C:
 			c.Conn.SetWriteDeadline(time.Now().Add(WRITE_WAIT_DEADLINE))
 			log.Printf("Send Keep Alive Id: %s\n", c.ID)
-			if err := c.Conn.WriteMessage(ws.PingMessage, nil); err != nil {
+			c.mu.Lock()
+			err := c.Conn.WriteMessage(ws.PingMessage, nil)
+			c.mu.Unlock()
+			if err != nil {
 				if ws.IsUnexpectedCloseError(err, ws.CloseGoingAway, ws.CloseAbnormalClosure) {
 					LogError("Unexpected Error Keep Alive:", err)
 				} else {
+					log.Printf("Keep Alive Client Closed Reason: %+v\n", err)
 					log.Printf("Keep Alive Client gone - Id: %s\n", c.ID)
 				}
 				return

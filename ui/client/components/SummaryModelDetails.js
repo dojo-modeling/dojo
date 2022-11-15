@@ -1,6 +1,7 @@
 import React from 'react';
 
 import Button from '@material-ui/core/Button';
+import Link from '@material-ui/core/Link';
 import Typography from '@material-ui/core/Typography';
 
 import { makeStyles } from '@material-ui/core/styles';
@@ -35,8 +36,6 @@ function SummaryModelDetails({ model }) {
     });
   }
 
-  const causemosUrl = `https://causemos.uncharted.software/#/model/${model.family_name}/model-publishing-experiment?datacube_id=${model.id}`;
-
   // no need to spread the following out onto a million lines
   /* eslint-disable react/jsx-one-expression-per-line */
   return (
@@ -48,7 +47,15 @@ function SummaryModelDetails({ model }) {
         Model Name: {model.name}
       </Typography>
       <Typography variant="body2" className={classes.subsection}>
-        Model Website: {model.maintainer?.website}
+        Model Website:
+        { /* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
+        <Link
+          href={model.maintainer?.website}
+          target="_blank"
+          rel="noopener"
+        >
+          {model.maintainer?.website}
+        </Link>
       </Typography>
       <Typography variant="body2" className={classes.subsection}>
         Model Family: {model.family_name}
@@ -71,17 +78,6 @@ function SummaryModelDetails({ model }) {
       <Typography variant="body2" className={classes.subsection}>
         Model ID: {model.id}
       </Typography>
-
-      {model?.is_published && (
-        <Button
-          className={classes.causemosButton}
-          variant="contained"
-          href={causemosUrl}
-          disableElevation
-        >
-          View Model on Causemos
-        </Button>
-      )}
 
       <Typography variant="subtitle2" className={classes.modelHeader}>Maintainer:</Typography>
       <Typography variant="body2" className={classes.subsection}>

@@ -1,15 +1,12 @@
-import React, {
-  useEffect, useState
-} from 'react';
+import React, { useEffect } from 'react';
 
-import CircularProgress from '@material-ui/core/CircularProgress';
 import Container from '@material-ui/core/Container';
 import Typography from '@material-ui/core/Typography';
 
 import { makeStyles } from '@material-ui/core/styles';
+import { useLocation } from 'react-router-dom';
 
 import { HorizontalLinearStepper } from './components/ModelFormStepper';
-import ContainerList, { refreshContainerInfo } from './components/ContainerList';
 
 const useStyles = makeStyles((theme) => ({
   paper: {
@@ -25,19 +22,12 @@ const useStyles = makeStyles((theme) => ({
 
 export default function Model() {
   const classes = useStyles();
-  const [isLoaded, setLoaded] = useState(false);
-  const [connectableContainers, setConnectableContainers] = useState(false);
 
-  const loader = async () => {
-    const containers = await refreshContainerInfo();
-    console.debug(containers);
-    const availableContainers = containers.filter((c) => c.info?.ok && c.node?.clients === 0);
-    setConnectableContainers(availableContainers);
-    setLoaded(true);
-  };
+  const query = new URLSearchParams(useLocation().search);
+  const modelFamily = query.get('family');
 
   useEffect(() => {
-    loader();
+    document.title = 'Model Registration - Dojo';
   }, []);
 
   return (
@@ -46,21 +36,12 @@ export default function Model() {
         <div className={classes.paper}>
 
           <Typography component="h3" variant="h4">
-            Register Model
+            Model Registration
           </Typography>
 
           <Container className={classes.stepper}>
-            <HorizontalLinearStepper />
+            <HorizontalLinearStepper modelFamily={modelFamily} />
           </Container>
-
-          { isLoaded
-            ? <ContainerList containers={connectableContainers} />
-            : (
-              <div>
-                <CircularProgress />
-              </div>
-            )}
-
         </div>
       </Container>
 

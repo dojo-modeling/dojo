@@ -1,0 +1,29 @@
+###################################
+# Airflow - Results Volume
+###################################
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: results-volume
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: results-claim
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

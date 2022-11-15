@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+
+VERSION="1.0.0"
+TAG="api-${VERSION}"
+GROUP=jataware
+NAME=dojo
+IMAGE="${GROUP}/${NAME}"
+
+docker build -f Dockerfile \
+       -t "${IMAGE}:${TAG}" \
+       .

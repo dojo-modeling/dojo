@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import Button from '@material-ui/core/Button';
 import Container from '@material-ui/core/Container';
@@ -87,6 +87,10 @@ const RunLogs = () => {
     runLogs, runLogsLoading, runLogsError
   } = useRunLogs(runid);
   const classes = useStyles();
+
+  useEffect(() => {
+    document.title = 'Run Logs - Dojo';
+  }, []);
 
   return (
     <Container>

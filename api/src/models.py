@@ -5,23 +5,25 @@ import uuid
 import time
 from copy import deepcopy
 import json
-from typing import Any, Dict, Generator, List, Optional, Union
+from typing import Dict, List, Union
 
 from elasticsearch import Elasticsearch
-from pydantic import BaseModel, Field
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status, Body
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from fastapi.logger import logger
 from validation import ModelSchema, DojoSchema
 
 from src.settings import settings
 from src.dojo import search_and_scroll, copy_configs, copy_outputfiles, copy_directive, copy_accessory_files
-from src.utils import plugin_action
-
+from src.plugins import plugin_action
+from src.utils import run_model_with_defaults
 
 router = APIRouter()
 
-es = Elasticsearch([settings.ELASTICSEARCH_URL], port=settings.ELASTICSEARCH_PORT)
+es = Elasticsearch(
+    [settings.ELASTICSEARCH_URL],
+    port=settings.ELASTICSEARCH_PORT
+)
 logger = logging.getLogger(__name__)
 
 
@@ -30,18 +32,50 @@ def current_milli_time():
     return round(time.time() * 1000)
 
 
+@router.get("/models/families")
+def list_model_families() -> List(ModelSchema.ModelFamilySchema):
+
+    es_families = es.search(index='model_families')
+    families = [
+        ModelSchema.ModelFamilySchema(**es_family["_source"])
+        for es_family in es_families["hits"]["hits"]
+    ]
+
+    return families
+
+
+@router.post("/models/families")
+def create_model_family(family: ModelSchema.ModelFamilySchema):
+
+    es.index(index="model_families", body=family.json(), id=family.family_name)
+
+    return Response(
+        status_code=status.HTTP_200_OK,
+        content="Model family created"
+    )
+
+
 @router.post("/models")
 def create_model(payload: ModelSchema.ModelMetadataSchema):
     model_id = payload.id
     payload.created_at = current_milli_time()
     body = payload.json()
 
-    model = json.loads(body)
+    # Create a new model family if it doesn't already exist
+    if not es.exists(index="model_families", id=payload.family_name):
+        logger.info(f"Model family doesn't exist. Creating new one.")
+        es.index(
+            index="model_families",
+            body=ModelSchema.ModelFamilySchema(
+                family_name=payload.family_name,
+                display_name=payload.family_name,
+            ).json(),
+            id=payload.family_name
+        )
 
-    plugin_action("before_create", data=model, type="model")
-    es.index(index="models", body=model, id=model_id)
-    plugin_action("post_create", data=model, type="model")
-
+    plugin_action("before_create", data=body, type="model")
+    es.index(index="models", body=json.loads(body), id=model_id)
+    plugin_action("post_create", data=body, type="model")
 
     return Response(
         status_code=status.HTTP_201_CREATED,
@@ -75,21 +109,21 @@ def get_latest_models(size=100, scroll_id=None) -> DojoSchema.ModelSearchResult:
         scroll_id = None
     else:
         scroll_id = results.get("_scroll_id", None)
+    results = [i["_source"] for i in results["hits"]["hits"]]
     return {
         "hits": count["count"],
         "scroll_id": scroll_id,
-        "results": [i["_source"] for i in results["hits"]["hits"]],
+        "results": results,
     }
+
 
 @router.put("/models/{model_id}")
 def update_model(model_id: str, payload: ModelSchema.ModelMetadataSchema):
     payload.created_at = current_milli_time()
     model = payload.json()
-
     plugin_action("before_update", data=model, type="model")
     es.index(index="models", body=model, id=model_id)
     plugin_action("post_update", data=model, type="model")
-
     return Response(
         status_code=status.HTTP_201_CREATED,
         headers={"location": f"/api/models/{model_id}"},
@@ -101,11 +135,9 @@ def update_model(model_id: str, payload: ModelSchema.ModelMetadataSchema):
 def modify_model(model_id: str, payload: ModelSchema.ModelMetadataPatchSchema):
     body = json.loads(payload.json(exclude_unset=True))
     logging.info(body)
-
     plugin_action("before_update", data=body, type="model")
     es.update(index="models", body={"doc": body}, id=model_id)
     plugin_action("post_update", data=body, type="model")
-
     return Response(
         status_code=status.HTTP_200_OK,
         headers={"location": f"/api/models/{model_id}"},
@@ -145,6 +177,12 @@ def register_model(model_id: str):
     external services via plugins.
     """
     model = es.get(index="models", id=model_id)["_source"]
+    model_obj = ModelSchema.ModelMetadataSchema.parse_obj(model)
+    update_model(model_id=model_id, payload=model_obj)
+
+    # On the notification step only, we want to include any previous versions so that they can be deprecated
+    previous_versions = model_versions(model_id)['prev_versions']
+    model["deprecatesIDs"] = previous_versions
 
     plugin_action("before_register", data=model, type="model")
     plugin_action("register", data=model, type="model")
@@ -173,7 +211,7 @@ def version_model(model_id : str, exclude_files: bool = False):
 
         Each output or qualifier output has a uuid corresponding to the outputfile idx
         this function changes the uuids in the models outputs and qualifiers to the new model version
-        outputfiles uuid. This is the uuid used by annotate.
+        outputfiles uuid. This is the uuid of the dataset.
         """
         updated_outputs = []
         for output in deepcopy(outputs):
@@ -296,3 +334,98 @@ def publish_model(model_id: str, publish_data: ModelSchema.PublishSchema):
         status_code=status.HTTP_200_OK,
         content="Model published",
     )
+
+
+@router.get("/models/{model_id}/test")
+def test_model(model_id: str):
+    """
+    This endpoint tests a model's functionality within Dojo.
+    """
+    run_id = run_model_with_defaults(model_id)
+    return Response(
+        status_code=status.HTTP_200_OK,
+        content=run_id,
+    )
+
+
+@router.post("/models/status")
+def generate_model_status(model_ids: List[str]):
+    """
+    Searches the current model status for the given models.
+    """
+    def status(model_id):
+        query = {
+          "query": {
+            "bool": {
+              "filter": [
+                {"term": {"model_id.keyword":  model_id}},
+                {"match": {"is_default_run": True}}
+              ]
+            }
+          },
+        }
+
+        result = es.search(index='runs', body=query)
+        no_default_run = result["hits"]["total"]['value'] == 0
+
+        if not no_default_run:
+            # Grab fields of run with highest unix epoch timestamp
+            run = max(
+              result["hits"]["hits"],
+              key=lambda hit: hit["_source"]["created_at"]
+            )["_source"]
+            run_status = run.get("attributes", {}).get("status", "absent")
+            return run_status.lower()
+        else:
+            return "absent"
+
+    return {model_id: status(model_id) for model_id in model_ids}
+
+
+@router.post("/models/test")
+def test_models(payload: DojoSchema.TestBatch):
+    """
+    Generates the model status for each model ID given using the results of the
+    last default run.
+    """
+    def status(model_id):
+        query = {
+          "query": {
+            "bool": {
+              "filter": [
+                {"term": {"model_id.keyword":  model_id}},
+                {"match": {"is_default_run": True}}
+              ]
+            }
+          },
+        }
+
+        result = es.search(index='runs', body=query)
+        no_default_run = result["hits"]["total"]['value'] == 0
+        should_create_new_run = (
+          payload.action == DojoSchema.StatusAction.force or
+          (
+             payload.action == DojoSchema.StatusAction.fill and
+             no_default_run
+          )
+        )
+
+        if should_create_new_run:
+            try:
+                test_model(model_id)
+                return "running"
+            except Exception as e:
+                logger.info(f'Failed to test {model_id} with error: {e}')
+                return "failed"
+        elif not no_default_run:
+            # Grab fields of run with highest unix epoch timestamp
+            run = max(
+              result["hits"]["hits"],
+              key=lambda hit: hit["_source"]["created_at"]
+            )["_source"]
+            run_status = run.get("attributes", {}).get("status", "absent")
+            return run_status.lower()
+        else:
+            return "absent"
+
+    return {model_id: status(model_id) for model_id in payload.model_ids}

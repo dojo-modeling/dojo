@@ -1,0 +1,19 @@
+version: '2.2'
+services:
+  rqworker:
+    build: .
+    container_name: dojo-rq-worker
+    networks:
+      - dojo
+    command:
+      - rq
+      - worker
+      - --url
+      - redis://${REDIS_HOST}:${REDIS_PORT}
+      - high
+      - default
+      - low
+
+networks:
+  dojo:
+    driver: bridge

@@ -4,7 +4,7 @@ import json
 import os
 from fastapi.logger import logger
 
-from src.utils import PluginInterface
+from src.plugins import PluginInterface
 
 
 class CausemosPlugin(PluginInterface):
