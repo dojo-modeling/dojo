@@ -12,6 +12,9 @@ import json
 import argparse
 from elasticsearch import Elasticsearch
 import boto3
+import docker
+import tarfile
+import io
 
 
 def populate_wdi_data(args):
@@ -59,20 +62,27 @@ def populate_wdi_data(args):
                 os.makedirs("output")
 
             # # save data to csv and metadata to json
-            df.to_csv(os.path.join("output", f"{name}.csv"), index=False)
-            with open(os.path.join("output", f"{name}_meta.json"), "w") as f:
+            df.to_csv(os.path.join("output", f"{meta.get('id')}.csv"), index=False)
+            with open(os.path.join("output", f"{meta.get('id')}_meta.json"), "w") as f:
                 json.dump(meta, f)
 
             # make parquet files
-            save_parquet(df, name)
+            save_parquet(df, meta.get("id"))
 
-            ## upload csv and parquet to s3
-            upload_files_to_s3(meta.get("id"), name, args)
+            if args.bucket is not None:
+                ## upload csv and parquet to s3
+                upload_files_to_s3(meta.get("id"), args)
+                # update meta data_paths
+                meta["data_paths"] = [
+                    f's3://{args.bucket}/datasets/{meta.get("id")}/{meta.get("id")}.parquet.gzip'
+                ]
+            else:
+                print("Saving files to docker volumn. Not s3.")
+                upload_to_docker_container(meta.get("id"))
 
-            # update meta data_paths
-            meta["data_paths"] = [
-                f's3://{args.bucket}/datasets/{meta.get("id")}/{meta.get("id")}.parquet.gzip'
-            ]
+                meta["data_paths"] = [
+                    f"file:///storage/datasets/{meta.get('id')}/{meta.get('id')}.parquet.gzip"
+                ]
 
             # # save meta data to elasticsearch
             save_meta_es(meta)
@@ -703,22 +713,48 @@ def save_meta_es(meta):
     # open json and validate
     # meta_check=pydantic.parse_file_as(path=f'output/{name}_meta.json', type_=IndicatorMetadataSchema)
     meta["created_at"] = current_milli_time()
-    print(f'id {meta.get("id")}')
     resp = es.index(index="indicators", body=meta, id=meta.get("id"))
     print(resp)
 
 
-def upload_files_to_s3(id, name, args):
-    with open(f"output/{name}.parquet.gzip", "rb") as f:
-        s3.upload_fileobj(f, f"{args.bucket}", f"datasets/{id}/{id}.parquet.gzip")
-    with open(f"output/{name}.csv", "rb") as f:
-        s3.upload_fileobj(f, f"{args.bucket}", f"datasets/{id}/raw_data.csv")
+def copy_to_container(container, src: str, dest: str):
+    stream = io.BytesIO()
+
+    with tarfile.open(fileobj=stream, mode="w|") as tar, open(src, "rb") as f:
+        info = tar.gettarinfo(fileobj=f)
+        info.name = os.path.basename(src)
+        tar.addfile(info, f)
+
+    resp = container.put_archive(dest, stream.getvalue())
+
+
+def upload_to_docker_container(id):
+    print("saving parquet and csv to docker")
+    client = docker.from_env()
+    container = client.containers.get("dojo-api")
+    container.exec_run(f"mkdir -p /storage/datasets/{id}")
+
+    src = f"output/{id}.parquet.gzip"
+    dest = f"/storage/datasets/{id}/"
+    copy_to_container(container=container, src=src, dest=dest)
+
+    src = f"output/{id}.csv"
+    dest = f"/storage/datasets/{id}/"
+    copy_to_container(container=container, src=src, dest=dest)
+
+
+def upload_files_to_s3(id, args):
+    with open(f"output/{id}.parquet.gzip", "rb") as f:
+        s3.upload_fileobj(f, f"{args.bucket}", f"{args.folder}/{id}/{id}.parquet.gzip")
+    with open(f"output/{id}.csv", "rb") as f:
+        s3.upload_fileobj(f, f"{args.bucket}", f"{args.folder}/{id}/raw_data.csv")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--es", help="Elasticsearch connection string")
-    parser.add_argument("--bucket", help="S3 bucket to save to")
+    parser.add_argument("--bucket", default=None, help="S3 bucket to save to")
+    parser.add_argument("--folder", default=None, help="S3 folder to save to")
     parser.add_argument("--aws_key", help="aws_key")
     parser.add_argument("--aws_secret", help="aws_secret")
     args = parser.parse_args()

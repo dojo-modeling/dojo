@@ -8,7 +8,7 @@ python examples/WDI/wdi.py --es=http://localhost:9200 --bucket="bucket name" --a
 ```
 --es flag needs to be set to the instance of elasticsearch you want to save metadata to.
 
---bucket is the aws bucket you want to save the parquet and csv files to.
+--bucket is the aws bucket you want to save the parquet and csv files to. If you do not set this flag the script will save the parquet and csv files locally in the docker container dojo-api at /storage/datasets/{id}/ . 
 
 --aws_key is you aws public key
 
