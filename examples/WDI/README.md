@@ -10,6 +10,8 @@ python examples/WDI/wdi.py --es=http://localhost:9200 --bucket="bucket name" --a
 
 --bucket is the aws bucket you want to save the parquet and csv files to. If you do not set this flag the script will save the parquet and csv files locally in the docker container dojo-api at /storage/datasets/{id}/ . 
 
+--folder is the aws folder of where you want to save the parquet and csv files. 
+
 --aws_key is you aws public key
 
 --aws_secret is you aws secret key
