@@ -367,6 +367,12 @@ class IndicatorMetadataSchema(BaseModel):
         examples=[["https://jataware-world-modelers.s3.amazonaws.com/WDI/data.csv"]],
         title="Data Path URLs",
     )
+    data_paths_normalized: Optional[List[str]] = Field(
+        [],
+        description="URL paths to normalized data",
+        examples=[["https://jataware-world-modelers.s3.amazonaws.com/WDI/data_normalized.csv"]],
+        title="Normalized Data Path URLs",
+    )    
     outputs: Optional[List[Output]] = Field(
         [],
         description="An array of dataset variables",
